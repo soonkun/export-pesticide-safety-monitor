@@ -1,0 +1,23 @@
+# 인증키·비밀
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 데이터/원본 스냅샷·생성물 (대용량/변동)
+data/
+out/
+*.sqlite
+*.db
+
+# OS/에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,253 @@
+# DATA_SOURCES.md — 공식 Data Source 조사 (STEP 1)
+
+> 수출농산물 농약 안전사용기준 상시점검·변경탐지 서비스 PoC
+> 작성일: 2026-08-18 · 상태: STEP 1 (조사·문서화 단계, 구현 이전)
+
+## 0. 문서의 원칙
+
+- 본 문서는 **실제로 확인한 사실만** 기록한다. 추측한 API/URL/데이터구조는 기준값으로 사용하지 않는다.
+- 각 항목에는 검증상태를 표기한다.
+  - ✅ **검증됨** — 2026-08-18 세션에서 실제 API 호출 또는 브라우저 조회로 직접 확인
+  - ⚠️ **확인필요** — 공식 출처·경로는 특정했으나 정확한 endpoint/schema/키는 구현 전 재확인 필요
+- **비공식 사이트·블로그·검색엔진 결과·2차 가공 데이터는 규정 기준값으로 사용하지 않는다.**
+  본 문서의 모든 기준 소스는 규제기관/국제기구/정부 공식 데이터셋에 한정한다.
+
+## 1. Source 계층 (§6)
+
+| 계층 | Source | 역할 | authoritative 여부 |
+|---|---|---|---|
+| Domestic guideline | RDA 수출농산물 농약안전사용지침 | 국내 지침(비교 기준 좌변) | 국내 지침에 대해 authoritative |
+| Current regulation | EU / Japan / (향후 US·Taiwan·China·Canada·Australia·HK) | 수입국 현행 규정 | 각국 MRL/등록에 대해 authoritative |
+| International reference | Codex (FAO/WHO) | 국제 참조 MRL | 국제 참조값 |
+| Early warning | WTO ePing / SPS | 변경 예고 탐지 전용 | ✗ (MRL 기준값으로 쓰지 않음, §16) |
+
+## 2. 데이터 획득 우선순위 (§8) — 모든 Source 공통
+
+1. 공식 API → 2. 공식 JSON/XML → 3. 공식 CSV/XLSX 다운로드 → 4. 공식 데이터셋 →
+5. 정적 HTML → 6. 동적 웹페이지 crawling
+
+API 또는 다운로드 파일이 있으면 HTML crawling보다 **반드시 우선** 사용한다.
+
+---
+
+## 3. Source별 상세
+
+각 Source는 다음 템플릿으로 기술한다:
+`공식 URL / 규제기관 / API여부 / 다운로드여부 / 데이터구조 / MRL / 등록상태 / PHI·사용조건 / update cycle / crawling필요 / 획득경로 / 검증상태 / 미확인 검증절차`
+
+---
+
+### 3.1 RDA — 수출농산물 농약안전사용지침 · ✅ 검증됨 (실 호출 완료)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | 농촌진흥청 (RDA), odcloud 공공데이터포털 제공 |
+| 공식 Base URL | `https://api.odcloud.kr/api` |
+| 데이터셋(UDDI) | `15154138/v1/uddi:eacf7771-ca89-4612-bbe2-c430042a3073` |
+| Swagger | `https://infuser.odcloud.kr/oas/docs?namespace=15154138/v1` |
+| 데이터셋명 | `농촌진흥청_수출농산물 농약안전사용지침_20251125` |
+| API 여부 | ✅ 있음 (REST, JSON/XML) |
+| 인증 | `serviceKey`(query) 또는 `Authorization` 헤더. 파라미터: `page`, `perPage`, `returnType` |
+| 조건필터 | ✅ `cond[<컬럼>::EQ]`, `cond[<컬럼>::LIKE]` 작동 확인(STEP4). `matchCount`로 필터건수 확인 |
+| 수록 범위 | ✅ **수출 (국가×작목) 조합만 수록** (예: 일본×사과/배 = 0건). 비교대상 부재를 불일치로 오판 금지 |
+| 다운로드 | API 페이지네이션으로 전량 수집 가능 (perPage 조정) |
+| **총 레코드** | **35,975건 (2026-08-18 실측)** |
+| 저장 순서 | 국가별로 그룹/정렬되어 있음 (page 1 = EU, page 200 = 중국 관측) |
+| MRL 제공 | ✅ `외국`(수입국 MRL) / `한국`(국내 지침 MRL) 두 컬럼 |
+| 등록상태 제공 | ✗ 컬럼 없음 |
+| PHI·사용조건 | 부분: `횟수`, `약량` 있음 / **PHI·희석배수·시행일 없음** |
+| update cycle | 지침 개정 시 (데이터셋명에 기준일 `20251125` 포함). 신규 개정본은 별도 UDDI로 게시될 수 있음 → **UDDI 변경 감시 필요** |
+| crawling 필요 | ✗ (공식 API 사용) |
+
+**실제 컬럼 (11개):**
+`국가, 작목, 용도, 적용병해충, 품목명, 작용기작, 상표명, 횟수, 약량, 외국, 한국`
+
+**실측 레코드 예시:**
+```json
+{
+  "국가": "EU", "작목": "배", "용도": "살충제",
+  "적용병해충": "가루깍지벌레",
+  "품목명": "델타메트린.스피로테트라맷(액상수화제)",
+  "작용기작": "3a,23", "상표명": "락다운",
+  "횟수": "3", "약량": "10mL",
+  "외국": "0.09|0.7|-", "한국": "0.5|0.5|-"
+}
+```
+
+**⚠️ 중요 구조 규칙 (반드시 파서에 반영):**
+- `외국`·`한국` 값은 파이프(`|`)로 분할된 배열이다.
+- 배열의 각 세그먼트는 `품목명`의 점(`.`)으로 구분된 **혼합제 유효성분과 위치 대응**한다.
+  - 예: `품목명 = "디클로벤티아족스.티플루자마이드.클로티아니딘(입제)"` (성분 3개)
+    → `한국 = "0.05|0.3|0.1"`, `외국 = "-|3|0.2"` → 성분별 MRL.
+  - `-` = 해당 성분에 대한 MRL 미설정.
+  - 단일성분 제품은 첫 칸만 채워지고 나머지는 `-`.
+- 따라서 MRL 비교 전에 **품목명 → 유효성분 분해 → 세그먼트 정렬** 단계가 선행되어야 한다. (§FIELD_MAPPING)
+
+**핵심 한계 (비교 설계에 직접 영향):**
+- CAS 번호 ✗ / 영문 품목명·유효성분 ✗ / 작물 학명 ✗ → pesticide_master·commodity_master 매핑 필수 (§10·§11).
+- **PHI ✗ / 희석배수 ✗ / 규정 시행일(effective date) ✗ / 등록상태 ✗**.
+- `약량`은 `"740mL,(0.8L/10a)"`, `"50g/상자"` 처럼 dose+면적환산+포장단위가 섞인 자유텍스트 → 정규화 필요.
+
+**시사점:** 이 데이터셋은 RDA가 **이미 캐시해 둔 `외국`(수입국) MRL**을 포함한다. 본 시스템의 핵심 임무는
+그 `외국` 값을 **라이브 해외 공식 소스로 독립 재검증**하여, RDA 캐시값과 해외 현행값의 stale/불일치를 탐지하는 것이다.
+
+---
+
+### 3.2 EU · ✅ 검증됨 (API·다운로드 존재 확인) / ⚠️ 필드 스키마는 구현 시 확정
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | European Commission, DG SANTE (Directorate-General for Health and Food Safety) |
+| 공식 UI | `https://food.ec.europa.eu/plants/pesticides/eu-pesticides-database_en` (EU Pesticides DB v3.4, Angular SPA) |
+| **권장 획득경로** | **EU Open Data Portal 데이터셋 "EU Pesticides"** |
+| └ 데이터셋 URI | `http://data.europa.eu/88u/dataset/pesticides` (id: `planthealth-pesticides`) |
+| API 여부 | ✅ 있음 (공식 JSON API 다수) |
+| 다운로드 | ✅ 있음 (JSON / CSV / XML) |
+| update cycle | ✅ **`Accrual Periodicity: daily`** (포털 메타데이터 실측), 최종갱신 2026-04 |
+| MRL 제공 | ✅ (pesticide/commodity MRL 조합) |
+| 등록상태 제공 | ✅ (Active Substances 승인 상태) |
+| PHI·사용조건 | △ (MRL DB에는 미포함. 제품승인은 회원국별 소관) |
+| crawling 필요 | ✗ 권장 안 함 — SPA는 JS 렌더로 취약. **API/다운로드 사용** |
+
+**✅ 실제 API 확정 (STEP 4에서 직접 호출·검증, 인증키 불필요):**
+- Base: `https://api.datalake.sante.service.ec.europa.eu/sante/pesticides/`
+- 엔드포인트/파라미터 (EU 공식 `Pesticides-APIs-V3.0.pdf`에서 추출):
+  | 엔드포인트 | 파라미터 | 용도 |
+  |---|---|---|
+  | `pesticide-residues-products` | `language`(필수)`,format,product_id,product_parent_id,product_code,product_type_id,api-version=v3.0` | 작물목록(381개) |
+  | `product-current-mrl-all-residues` | `PRODUCT_ID`(필수)`,format,api-version=v3.0` | 한 작물의 전체 현행 MRL |
+  | `active-substances` | `substance_id,substance_name,substance_status,approval_date,expiry_date,substance_category` | 등록/승인 상태 |
+  | `pesticide-residues-mrls-download` | `language`(필수)`,format` | 전량 flat file(>10MB) |
+- 페이징: `{value:[...], nextLink:"...&$after=<cursor>"}`, page size 100.
+- MRL 필드: `PRODUCT_ID, PEST_RES_ID, MRL_VALUE, MRL_LOD, MRL_DISPLAY, PESTICIDE_RESIDUE_NAME, MRL_FOOTNOTE`.
+  `MRL_LOD="*"`+`MRL_DISPLAY="0.05*"` = 기본값/LOQ(미설정).
+- 작물코드 = EU Reg 396/2005 Annex I (0130010 Apples, 0130020 Pears, 0151010 Table grapes, 0152000 strawberries).
+- ⚠️ 주의: 작물명 중복(`Strawberry` 0632010=허브침출 vs `(b) strawberries` 0152000=과일) → **코드로 매핑**. 간헐적 HTTP 500(재시도).
+- 상세 실측·비교결과는 [FIELD_MAPPING.md](FIELD_MAPPING.md)·[STEP4_VALIDATION.md](STEP4_VALIDATION.md) 참조.
+
+---
+
+### 3.3 Japan · ✅ 검증됨 (검색 시스템, bulk/API 미노출)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | 소비자청(CAA) / 후생노동성(MHLW) — Positive List 제도 |
+| 공식 DB | `https://jpn-pesticides-database.go.jp/prdb/` — 残留農薬等データベース検索システム (영/일) |
+| 도움말 | `.../prdb/help/prdb_help_en.pdf` (영문 사용자 가이드) |
+| API 여부 | ⚠️ **화면상 미노출** (검색 시스템) |
+| 다운로드 | ⚠️ **bulk 다운로드 미노출** |
+| 데이터구조 | 검색축: `農薬名`(농약명) / `食品分類名`(식품분류) / `試験法`(시험법) / `表示モード`(표시모드) |
+| MRL 제공 | ✅ 基準値(MRL) |
+| 시행일 제공 | ✅ **적용개시일(施行日)을 비고란(備考)에 제공** (令和4.8.10 개정告示 이후) |
+| 시험법 제공 | ✅ 試験法 (영문판 포함) |
+| 등록상태 제공 | ✗ (여기 없음 — 농약등록은 JMAFF/ACIS 별도 소스) |
+| PHI·사용조건 | ✗ (여기 없음 — 등록정보 측) |
+| update cycle | 부정기(소비자청 消食基 통지 기반, 대략 월 단위). 페이지 최종갱신 2026-08-07 관측 |
+| crawling 필요 | ✅ **필요** — 농약×식품 폼 기반 조회 (파서 취약도 높음) |
+| authoritative | **CAA 官報(관보)** — DB 자체가 "정확한 정보는 官報으로 재확인" 명시 |
+
+**⚠️ 검증절차 (구현 전):**
+1. 도움말 PDF를 텍스트 추출하여 검색 파라미터·출력 필드·결과 구조를 확정한다. (이번 세션은 로컬 poppler 부재로 PDF 파싱 미완)
+2. 폼 submit 시 발생하는 내부 요청(POST/GET)·응답 포맷을 브라우저 network으로 확인 → 가능하면 그 내부 endpoint 사용.
+3. **bulk/API가 끝내 없다면**: 대상 농약×식품 조합만 폼 조회 → DOM 파싱. 이 경우 §30 selector fingerprint를 반드시 저장.
+4. 등록/PHI가 필요하면 JMAFF/ACIS(농약등록정보) 소스를 별도 조사 (본 STEP 범위 밖, 향후).
+
+---
+
+### 3.4 Codex (FAO/WHO) · ✅ 검증됨 (구조 확인, bulk/API 미노출)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | FAO/WHO Codex Alimentarius Commission (국제 참조) |
+| 공식 DB | `https://www.fao.org/fao-who-codexalimentarius/codex-texts/dbs/pestres/pesticides/en/` |
+| 상세 URL 패턴 | `.../dbs/pestres/pesticide-detail/en/?p_id=N` (N = 안정적 정수 ID) |
+| API 여부 | ⚠️ 미노출 |
+| 다운로드 | ⚠️ bulk CSV/XLSX 미노출 |
+| 데이터구조 | 농약 인덱스(알파벳/ID) → 농약별 상세에 commodity별 MRL 표 |
+| MRL 제공 | ✅ (국제 참조 MRL) |
+| 등록상태·PHI | ✗ (Codex는 등록/PHI 아님, MRL 중심) |
+| update cycle | JMPR 평가 → CCPR/CAC 채택 (연 주기, ⚠️ 정확 주기 확인필요) |
+| crawling 필요 | ✅ **필요** — 농약별 상세페이지 스크레이핑 (p_id 순회) |
+
+**실측된 안정 식별자 예시:** `Fludioxonil=211`, `Deltamethrin=135`, `Chlorantraniliprole=230`, `Imidacloprid=206`, `2,4-D=20`.
+→ p_id는 안정적이므로 **pesticide_master의 `Codex_identifier`로 활용** 가능 (§10).
+
+**⚠️ 검증절차 (구현 전):**
+1. 상세페이지(`?p_id=N`)의 HTML 표 구조·컬럼(commodity, MRL, step/year 등)을 확정하고 selector fingerprint 저장(§30).
+2. p_id 전체 범위(인덱스에서 수집)를 순회하는 방식으로 전량 확보.
+3. bulk 파일/API 존재 여부를 Codex 사무국 문의로 재확인(있다면 우선순위 상향).
+
+---
+
+### 3.5 WTO ePing / SPS · ✅ 검증됨 (API·키·엔드포인트·응답필드 전부 확인)
+
+| 항목 | 내용 |
+|---|---|
+| 용도 | **authoritative MRL 아님. 향후 변경 탐지(Early warning) 전용** (§16) |
+| API 포털 | `https://apiportal.wto.org` (계정 가입 → Products → Standard 구독) |
+| **API Base URL** | ✅ **`https://api.wto.org/eping/`** (Azure API Management) |
+| 제품/등급 | `Standard` (묶음: ePing + Quantitative Restrictions + Timeseries), **무료**. 10 calls/s, 10,000/hour |
+| 인증 | ✅ 헤더 `Ocp-Apim-Subscription-Key: <키>` 또는 쿼리 `?subscription-key=<키>`. 키는 `.env`의 `WTO_API_KEY` |
+| 검증 결과 | ✅ 2026-08-18: members 164개 반환, **notifications/search `totalCount 104,818` 정상 반환** |
+
+**엔드포인트 (검증됨):**
+- `GET /eping/members?language={1\|2\|3}` — 회원국 목록 (코드 예: Viet Nam=`C704`)
+- `GET /eping/notifications/search?language=1&...` — **SPS/TBT 통보문 검색 (핵심)**
+  - 파라미터: `language`(필수, 1=EN), `domainIds`(SPS/TBT), `documentSymbol`,
+    `distributionDateFrom`, `distributionDateTo`, `countryIds`, `hs`, `ics`, `freeText`, `page`, `pageSize`
+  - 응답 top-level: `currentPage`, `pageSize`, `totalCount`
+
+**통보문 레코드 핵심 필드 (검증됨) → 본 시스템 매핑:**
+| ePing 필드 | 용도 |
+|---|---|
+| `area` (SPS/TBT) | SPS만 필터 |
+| `notificationType` | Regular/Emergency 등 구분 |
+| `distributionDate` | 통보 배포일 → 변경탐지 기준일 |
+| `commentDeadlineDate` | 의견마감일 → `COMMENT_PERIOD` 상태(§16) |
+| `proposedAdoptionDate(Text)` | 채택예정 → `ADOPTED` 예고 |
+| `proposedEntryIntoForceDate(Text)` | **시행예정일** → `EFFECTIVE`/`UPCOMING_CHANGE`(§4·§16) |
+| `notifyingMember(Code)` | 통보국 (수입국 매칭) |
+| `title/description(Plain)`, `productsFreeText(Plain)` | LLM 요약·분석 대상(§5, `AI_ANALYZED`) |
+| `hsCodes/icsCodes/keywords/spsKeywords/objectives` | 농약·MRL 관련 통보 필터 (예: freeText="maximum residue") |
+| `documentSymbol` (예: `G/SPS/N/VNM/190`) | 통보 식별자 |
+| `notifiedDocumentLink`, `linkToNotification` | 원본 문서 링크(§9 보존) |
+| `codexAlimentariusCommision` | Codex 관련 여부 플래그 |
+
+**수집 전략:**
+1. 일 단위 폴링: `area=SPS` + `distributionDateFrom=어제` 로 신규 통보 증분 수집.
+2. 농약/MRL 관련만 선별: `freeText`(예: "maximum residue level", "pesticide") + `objectives`/`spsKeywords` 필터.
+3. 수집값은 **변경 예고**로만 저장하고, **MRL 기준값으로 확정하지 않는다**(§16). 상태: PROPOSED~WITHDRAWN.
+4. (대안) WTO Data Portal `data.wto.org` 데이터셋 `ext_eping` XLSX bulk 다운로드 병행 가능.
+
+---
+
+## 4. Source별 요약 매트릭스
+
+| Source | 계층 | API | 다운로드 | crawling | MRL | 등록 | PHI/사용 | update | 검증상태 |
+|---|---|---|---|---|---|---|---|---|---|
+| RDA | Domestic | ✅ | ✅(API) | ✗ | ✅ | ✗ | 부분(횟수/약량) | 개정시 | ✅ 실호출 |
+| EU | Current | ✅ | ✅ | 회피 | ✅ | ✅ | △ | **일 단위** | ✅ 존재확인 |
+| Japan | Current | ⚠️미노출 | ⚠️미노출 | ✅필요 | ✅ | ✗(별도) | ✗(별도) | 부정기(월) | ✅ 구조확인 |
+| Codex | Reference | ⚠️미노출 | ⚠️미노출 | ✅필요 | ✅ | ✗ | ✗ | 연 | ✅ 구조확인 |
+| WTO ePing | Early warn | ✅ | ✅(XLSX) | ✗ | ✗(예고만) | — | — | 상시 | ✅ 전체검증(search) |
+
+## 5. Collector 설계 시사점 (STEP 5 이후)
+
+- Collector는 source별 독립 모듈(§7): `rda.py`(API), `eu.py`(API/다운로드), `japan.py`(폼 crawling),
+  `codex.py`(p_id 스크레이핑), `wto_eping.py`(API/XLSX).
+- 안정성 등급: **RDA·EU(높음, 구조화 API)** > **WTO(중간)** > **Japan·Codex(낮음, 스크레이핑 → §30 fingerprint 필수)**.
+- 모든 수집은 원본 보존(§9): `source, URL, retrieved_at, HTTP_status, content_type, content_hash, file_hash, source_version, effective_date, raw_file_path`.
+
+## 6. 미확인 항목 총괄 (다음 검증 대상)
+
+| # | Source | 미확인 항목 | 검증 방법 |
+|---|---|---|---|
+| 1 | EU | 각 distribution의 정확 endpoint·필드·rate-limit | 포털 Access 링크 호출 |
+| 2 | Japan | 검색 폼 내부 요청·응답 포맷, bulk/API 존재 | network 관측 + 도움말 PDF 텍스트 추출 |
+| 3 | Codex | 상세페이지 표 컬럼·p_id 전체범위, bulk 존재 | 상세페이지 파싱 + 사무국 문의 |
+| 4 | WTO | ✅완료 (base·키·members·notifications/search·응답필드 모두 검증) | — |
+| 5 | RDA | 신규 개정본 게시 시 UDDI 변경 여부 | odcloud 목록 API 주기 점검 |
+| 6 | (향후) | Japan 등록/PHI (JMAFF/ACIS), US/Taiwan/China 등 추가국 | 별도 STEP |
+
+---
+*본 문서는 STEP 1 산출물이다. 여기서 ⚠️로 남은 항목은 구현(STEP 5) 전에 반드시 실제 확인하며, 확인 전까지 코드에 확정값으로 넣지 않는다.*
