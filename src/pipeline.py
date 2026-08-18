@@ -35,12 +35,14 @@ def collect_all(conn) -> list[dict]:
 def run_daily(notify: bool = True) -> dict:
     conn = db.connect()
     db.init_db(conn)
+    conn.execute("DELETE FROM alerts")   # 알림은 매 실행마다 현재 상태로 재생성(누적 방지)
+    conn.commit()
     print("[1/4] 공식 데이터 수집 …")
     runs = collect_all(conn)
     print("[2/4] 표준화·변경탐지·비교 …")
     from .compare import run_comparisons
-    comps = run_comparisons(conn)
-    print(f"      비교결과 {len(comps)}건")
+    res = run_comparisons(conn)
+    print(f"      비교결과 {len(res['comparisons'])}건 · 변경예고 {len(res['upcoming'])}건")
     print("[3/4] 보고서 생성 …")
     rep = report.build(conn)
     print(f"      대시보드: {rep['dashboard_path']}")

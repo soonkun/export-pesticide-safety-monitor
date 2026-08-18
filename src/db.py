@@ -100,6 +100,18 @@ CREATE TABLE IF NOT EXISTS change_events (
   kind TEXT, old_value TEXT, new_value TEXT, note TEXT
 );
 
+-- 농약 등록/승인 상태 (§14, 수출 가부 판정)
+CREATE TABLE IF NOT EXISTS registrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT, pesticide_en TEXT, status TEXT,
+  approval_date TEXT, expiry_date TEXT, retrieved_at TEXT,
+  UNIQUE(source, pesticide_en)
+);
+CREATE TABLE IF NOT EXISTS registration_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT, pesticide_en TEXT, status TEXT, observed_at TEXT
+);
+
 -- SPS 통보문 (§16, WTO 변경예고)
 CREATE TABLE IF NOT EXISTS sps_notifications (
   id TEXT PRIMARY KEY, area TEXT, notif_type TEXT, member TEXT,
@@ -162,6 +174,29 @@ def upsert_health(conn, source: str, **kw) -> None:
         f"ON CONFLICT(source) DO UPDATE SET {updates}",
         tuple([source] + list(kw.values())),
     )
+
+
+def record_registration(conn, *, source, pesticide_en, status, approval_date=None,
+                        expiry_date=None) -> None:
+    """등록상태 upsert + 상태 변경 시 history/change_events(REGISTRATION_CHANGED) 기록 (§14)."""
+    ts = now_iso()
+    prev = conn.execute("SELECT status FROM registrations WHERE source=? AND pesticide_en=?",
+                        (source, pesticide_en)).fetchone()
+    conn.execute(
+        "INSERT INTO registrations(source,pesticide_en,status,approval_date,expiry_date,retrieved_at)"
+        " VALUES(?,?,?,?,?,?) ON CONFLICT(source,pesticide_en) DO UPDATE SET "
+        "status=excluded.status,approval_date=excluded.approval_date,"
+        "expiry_date=excluded.expiry_date,retrieved_at=excluded.retrieved_at",
+        (source, pesticide_en, status, approval_date, expiry_date, ts))
+    if prev is None or prev["status"] != status:
+        conn.execute("INSERT INTO registration_history(source,pesticide_en,status,observed_at)"
+                     " VALUES(?,?,?,?)", (source, pesticide_en, status, ts))
+        if prev is not None:
+            conn.execute(
+                "INSERT INTO change_events(detected_at,source,pesticide_en,commodity_ko,kind,old_value,new_value,note)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (ts, source, pesticide_en, None, "REGISTRATION_CHANGED",
+                 prev["status"], status, "등록상태 변경 관측"))
 
 
 def add_alert(conn, *, category, severity, title, body, source=None) -> None:

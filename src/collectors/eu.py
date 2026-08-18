@@ -17,6 +17,17 @@ from .base import BaseCollector, CollectResult, sha
 EXPECTED_FIELDS = {"PRODUCT_ID", "MRL_VALUE", "PESTICIDE_RESIDUE_NAME"}
 
 
+def _iso(d: str | None) -> str | None:
+    """EU 날짜 'DD/MM/YYYY' → 'YYYY-MM-DD'."""
+    if not d or "/" not in d:
+        return d
+    try:
+        dd, mm, yy = d.split("/")
+        return f"{yy}-{mm}-{dd}"
+    except ValueError:
+        return d
+
+
 class EuCollector(BaseCollector):
     name = "EU"
 
@@ -40,9 +51,31 @@ class EuCollector(BaseCollector):
                 db.record_foreign_mrl(conn, source=self.name, pesticide_en=en,
                                       commodity_ko=commodity_ko, commodity_src=cm["eu_code"], mrl=mrl)
                 stored += 1
+
+        # 유효성분 등록/승인 상태 (수출 가부 판정용)
+        self._collect_registrations(conn, s)
         return CollectResult(http_status=200, records_received=total, records_valid=stored,
                              content_hash=sha(str(total)),
                              schema_hash=sha(",".join(sorted(EXPECTED_FIELDS))))
+
+    def _collect_registrations(self, conn, s) -> None:
+        url = f"{EU_BASE}/active-substances"
+        for pest_ko, pm in PESTICIDES.items():
+            en = pm["english"]
+            r = self._get_retry(s, url, {"substance_name": en, "format": "json",
+                                         "api-version": EU_API_VERSION})
+            try:
+                arr = (r.json().get("value") if isinstance(r.json(), dict) else r.json()) or []
+            except Exception:
+                continue
+            rec = next((a for a in arr
+                        if (a.get("substance_name") or "").lower() == en.lower()), None)
+            if not rec:
+                continue
+            db.record_registration(conn, source=self.name, pesticide_en=en,
+                                   status=rec.get("substance_status"),
+                                   approval_date=_iso(rec.get("approval_date")),
+                                   expiry_date=_iso(rec.get("expiry_date")))
 
     @staticmethod
     def _find(residues: list[dict], english: str):

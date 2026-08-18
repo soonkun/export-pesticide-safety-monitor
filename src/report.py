@@ -62,32 +62,43 @@ def gather(conn) -> dict:
             sys_counts["fail"] += 1
 
     sev_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
-    comps.sort(key=lambda c: (sev_order.get(c["severity"], 0), c["status"]), reverse=True)
+    item_order = {"REGISTRATION": 3, "GUIDELINE": 2, "EXPORT_MARGIN": 1}
+    comps.sort(key=lambda c: (item_order.get(c["item"], 0), sev_order.get(c["severity"], 0)),
+               reverse=True)
 
+    # 담당자 조치사항 (의사결정)
+    actions = {
+        "update_guideline": [c for c in comps if c["item"] == "GUIDELINE" and c["status"] == "FOREIGN_CHANGED"],
+        "no_export": [c for c in comps if c["item"] == "REGISTRATION"],
+        "stale": [c for c in comps if c["item"] == "GUIDELINE" and c["status"] == "REVIEW_REQUIRED"],
+        "upcoming": [a for a in alerts if a["category"] == "UPCOMING"],
+    }
     return {
         "date": date.today().isoformat(),
         "health": health, "comps": comps, "alerts": alerts,
         "changes": changes, "sps": sps,
         "reg_counts": reg_counts, "sys_counts": sys_counts,
-        "reg_alerts": [a for a in alerts if a["category"] == "REGULATION"],
+        "actions": actions,
+        "reg_alerts": [a for a in alerts if a["category"] in ("REGULATION", "REGISTRATION")],
         "sys_alerts": [a for a in alerts if a["category"] == "SYSTEM"],
     }
 
 
 def render_text(g: dict) -> str:
-    """카카오/짧은 알림용 요약 텍스트."""
-    rc, sc = g["reg_counts"], g["sys_counts"]
+    """카카오/짧은 알림용 요약 텍스트 — 조치사항 중심."""
+    a, sc = g["actions"], g["sys_counts"]
     lines = [
         f"[{REPORT_TITLE}] {g['date']}",
-        f"규정: 🟢{rc['ok']} 🟡{rc['warn']} 🔴{rc['fail']}",
+        f"🔴 지침갱신 {len(a['update_guideline'])} · 수출불가 {len(a['no_export'])} · "
+        f"변경예고 {len(a['upcoming'])} · 최신성확인 {len(a['stale'])}",
         f"수집: 🟢{sc['ok']} 🟡{sc['warn']} 🔴{sc['fail']}",
     ]
-    if g["reg_alerts"]:
-        lines.append(f"규정알림 {len(g['reg_alerts'])}건 (예: {g['reg_alerts'][0]['title']})")
-    if g["sys_alerts"]:
-        lines.append(f"시스템알림 {len(g['sys_alerts'])}건 (예: {g['sys_alerts'][0]['title']})")
-    if not g["reg_alerts"] and not g["sys_alerts"]:
-        lines.append("신규 알림 없음")
+    top = (a["no_export"] or a["update_guideline"])
+    if top:
+        c = top[0]
+        lines.append(f"예: {c['source']} {c['commodity_ko']}/{c['pesticide_en']} — {(c['detail'] or '')[:60]}")
+    elif not a["upcoming"] and not a["stale"]:
+        lines.append("조치 필요사항 없음(최신 확인됨)")
     return "\n".join(lines)[:190]
 
 
@@ -98,7 +109,8 @@ def _rows_html(comps: list[dict]) -> str:
         conf = c["data_confidence"]
         conf_warn = "" if conf == "HIGH" else " style='color:#b30'"
         out.append(
-            f"<tr><td>{DOT[b]}</td><td>{html.escape(c['source'])}</td>"
+            f"<tr><td>{DOT[b]}</td><td><small>{html.escape(c.get('item',''))}</small></td>"
+            f"<td>{html.escape(c['source'])}</td>"
             f"<td>{html.escape(c['commodity_ko'])}</td><td>{html.escape(c['pesticide_ko'])}"
             f"<br><small>{html.escape(c['pesticide_en'])}</small></td>"
             f"<td>{html.escape(c['korea_mrl'] or '-')}</td>"
@@ -132,6 +144,32 @@ def _health_html(health: list[dict]) -> str:
     return "\n".join(out)
 
 
+def _actions_html(g: dict) -> str:
+    a = g["actions"]
+
+    def _li(items, fmt):
+        return "".join(fmt(c) for c in items) or "<li>해당 없음</li>"
+
+    upd = _li(a["update_guideline"], lambda c:
+              f"<li>🔴 <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}/"
+              f"{html.escape(c['pesticide_en'])}</b> — {html.escape(c['detail'] or '')}</li>")
+    noexp = _li(a["no_export"], lambda c:
+                f"<li>⛔ <b>{html.escape(c['commodity_ko'])}/{html.escape(c['pesticide_en'])}</b> — "
+                f"{html.escape(c['detail'] or '')}</li>")
+    up = _li(a["upcoming"], lambda x:
+             f"<li>🕒 {html.escape(x['title'])}<br><small>{html.escape((x['body'] or '')[:200])}</small></li>")
+    stale = _li(a["stale"], lambda c:
+                f"<li>⚠ <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}/"
+                f"{html.escape(c['pesticide_en'])}</b> — {html.escape(c['detail'] or '')}</li>")
+    return f"""<h2>■ 담당자 조치사항 (의사결정)</h2>
+<div class=actions>
+ <div class=act><h3>① 지침 갱신 필요 <small>(배포 해외기준 ≠ 현행)</small></h3><ul>{upd}</ul></div>
+ <div class=act><h3>② 수출용 사용 불가 <small>(수입국 미승인/등록취소)</small></h3><ul>{noexp}</ul></div>
+ <div class=act><h3>③ 변경 예고 <small>(eping, N개월 후 대비)</small></h3><ul>{up}</ul></div>
+ <div class=act><h3>④ 최신성 확인 필요 <small>(수집 실패 → 신뢰 불가)</small></h3><ul>{stale}</ul></div>
+</div>"""
+
+
 def render_html(g: dict) -> str:
     rc, sc = g["reg_counts"], g["sys_counts"]
     alerts_html = "".join(
@@ -157,6 +195,10 @@ def render_html(g: dict) -> str:
  th,td{{border:1px solid #e3e6ea;padding:6px 8px;text-align:left;vertical-align:top}}
  th{{background:#f0f3f6}} small{{color:#666}}
  .note{{background:#fff8e1;border:1px solid #ffe082;padding:10px;border-radius:8px;font-size:13px}}
+ .actions{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+ @media(max-width:700px){{.actions{{grid-template-columns:1fr}}}}
+ .act{{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:10px}}
+ .act h3{{margin:0 0 6px;font-size:14px}} .act ul{{margin:0;padding-left:18px}} .act li{{margin:4px 0;font-size:13px}}
 </style></head><body><div class=wrap>
 <h1>📋 {REPORT_TITLE} <small>기준일 {g['date']}</small></h1>
 <div class=cards>
@@ -172,13 +214,16 @@ def render_html(g: dict) -> str:
 <div class=note>⚠ 이 시스템은 "변경 없음"이 아니라 <b>"최신 정보를 정상 확인했고 그 결과 변경 없음"</b>을 보증합니다.
  각 비교결과에는 Source 상태·최신성·마지막 정상수집일이 함께 표시됩니다. 최신성 미확인 항목은 "이상 없음"으로 간주하지 않습니다.</div>
 
+{_actions_html(g)}
+
 <h2>B. 시스템(데이터 수집) 현황</h2>
 <table><tr><th></th><th>Source</th><th>국가</th><th>상태</th><th>최신성</th><th>records</th>
  <th>마지막 정상수집</th><th>마지막 시도</th><th>메시지</th></tr>
 {_health_html(g['health'])}</table>
 
-<h2>A. 규정 비교 결과 (심각도순)</h2>
-<table><tr><th></th><th>Source</th><th>작물</th><th>농약</th><th>국내(한국)</th><th>해외</th>
+<h2>A. 규정 비교 결과 (항목·심각도순)</h2>
+<p><small>GUIDELINE=지침 배포값 vs 현행 · REGISTRATION=등록/수출가부 · EXPORT_MARGIN=국내지침 여유(참고)</small></p>
+<table><tr><th></th><th>항목</th><th>Source</th><th>작물</th><th>농약</th><th>지침/국내</th><th>현행 해외</th>
  <th>상태</th><th>Severity</th><th>신뢰도<br>(상태/최신성)</th><th>근거</th></tr>
 {_rows_html(g['comps'])}</table>
 

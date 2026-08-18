@@ -54,7 +54,7 @@ class WtoCollector(BaseCollector):
                 "title,products,keywords,link,retrieved_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (nid, n.get("area"), n.get("notificationType"), n.get("notifyingMember"),
                  n.get("distributionDate"), n.get("commentDeadlineDate"),
-                 n.get("proposedEntryIntoForceDate") or n.get("proposedEntryIntoForceDateText"),
+                 n.get("proposedEntryIntoForceDate"),   # ISO 날짜만(텍스트는 시행일 계산 불가)
                  (n.get("documentSymbol") or "").strip(),
                  n.get("titlePlain") or n.get("title"),
                  n.get("productsFreeTextPlain") or "",
