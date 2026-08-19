@@ -15,7 +15,7 @@ import math
 from datetime import date, datetime
 
 from . import db
-from .masters import COMMODITIES, PESTICIDES
+from .masters import COMMODITIES, PESTICIDES, member_label
 from .models import Confidence, Freshness, Health, Mrl, MrlKind, RegStatus, Severity
 from .normalize import align_pipe, split_rda_product
 
@@ -64,14 +64,26 @@ def _pick(rows, col, pesticide_ko) -> Mrl | None:
     return best[1] if best else None
 
 
-def live_mrl(conn, source, pesticide_en, commodity_ko) -> Mrl | None:
-    r = conn.execute("SELECT mrl_kind,mrl_value,mrl_display,is_default,note FROM foreign_mrls "
-                     "WHERE source=? AND pesticide_en=? AND commodity_ko=?",
+def live_row(conn, source, pesticide_en, commodity_ko):
+    """현행 해외기준 1건 → (Mrl, 근거 dict). 없으면 (None, {})."""
+    r = conn.execute("SELECT mrl_kind,mrl_value,mrl_display,is_default,note,source_url,basis "
+                     "FROM foreign_mrls WHERE source=? AND pesticide_en=? AND commodity_ko=?",
                      (source, pesticide_en, commodity_ko)).fetchone()
     if not r:
-        return None
-    return Mrl(MrlKind(r["mrl_kind"]), value=r["mrl_value"], raw=r["mrl_display"],
-               note=r["note"] or "", is_default=bool(r["is_default"]))
+        return None, {}
+    mrl = Mrl(MrlKind(r["mrl_kind"]), value=r["mrl_value"], raw=r["mrl_display"],
+              note=r["note"] or "", is_default=bool(r["is_default"]))
+    hist = conn.execute(
+        "SELECT observed_at FROM mrl_history WHERE source=? AND pesticide_en=? AND commodity_ko=? "
+        "ORDER BY id", (source, pesticide_en, commodity_ko)).fetchall()
+    # 이력이 1건이면 '처음 확인한 날', 2건 이상이면 '값이 바뀐 걸 감지한 날'
+    when = (hist[-1]["observed_at"] or "")[:10] if hist else ""
+    changed_at = (f"{when} 변경 감지" if len(hist) > 1 else (f"{when} 최초 확인" if when else ""))
+    return mrl, {"source_url": r["source_url"], "basis": r["basis"], "changed_at": changed_at}
+
+
+def live_mrl(conn, source, pesticide_en, commodity_ko) -> Mrl | None:
+    return live_row(conn, source, pesticide_en, commodity_ko)[0]
 
 
 # ---- 1) 지침 정합성 판정 ----
@@ -106,49 +118,136 @@ def registration(conn, source, pesticide_en):
         (source, pesticide_en)).fetchone()
 
 
-# ---- 3) eping 변경예고 매칭 ----
+# ---- 3) eping 통보문 분류 (§3) ----
+# 원칙: "이미 시행됐고 우리 수집에 반영됐다"는 알릴 이유가 없다. 알릴 것은 두 가지뿐이다.
+#   ① 시행됐는데 우리 데이터가 그 이후로 갱신되지 않음 → 미반영 의심, 즉시 수정 (근거자료 첨부)
+#   ② 아직 시행 전 → D-day 와 함께 대비
+# 나머지(반영 확인 / 우리가 기준을 수집하지 않는 회원국의 지난 통보)는 숨기고 건수만 남긴다.
 
-def _months_until(d: str | None) -> int | None:
+# 우리가 현행 MRL 을 직접 수집하는 회원국 → 반영 여부를 판정할 수 있다.
+TRACKED_MEMBERS = {"European Union": "EU", "Japan": "Japan"}
+
+
+def _days_until(d: str | None) -> int | None:
     if not d:
         return None
     try:
-        dt = datetime.strptime(d[:10], "%Y-%m-%d").date()
+        return (datetime.strptime(d[:10], "%Y-%m-%d").date() - date.today()).days
     except ValueError:
         return None
-    return (dt.year - date.today().year) * 12 + (dt.month - date.today().month)
 
 
-def upcoming_from_eping(conn) -> list[dict]:
-    """SPS 통보문 중 master 성분이 언급되고 시행예정일이 미래인 것 → 변경예고."""
-    out = []
+def dday(days: int | None) -> str:
+    if days is None:
+        return "D-?"
+    if days == 0:
+        return "D-DAY"
+    return f"D-{days}" if days > 0 else f"D+{-days}"
+
+
+def _upcoming_severity(days: int | None) -> str:
+    if days is None or days > 90:
+        return "LOW"
+    return "HIGH" if days <= 30 else "MEDIUM"
+
+
+def classify_eping(conn) -> dict:
+    """SPS 통보문 중 master 성분이 언급된 것을 미반영/대비/숨김으로 분류한다(읽기 전용).
+
+    보고서도 같은 함수를 그대로 호출한다 — 알림과 화면이 갈라지지 않도록.
+    """
+    last_ok = {r["source"]: r["last_success_at"]
+               for r in conn.execute("SELECT source,last_success_at FROM source_health")}
+    ens = {pm["english"].lower(): ko for ko, pm in PESTICIDES.items()}
+
+    urgent, prepare = [], []
+    hidden = {"reflected": 0, "out_of_scope": 0, "undated": 0}
     rows = conn.execute(
         "SELECT member,document_symbol,title,products,entry_into_force,comment_deadline,link "
         "FROM sps_notifications").fetchall()
-    ens = {pm["english"].lower(): (ko, pm) for ko, pm in PESTICIDES.items()}
     for r in rows:
         text = f"{r['title'] or ''} {r['products'] or ''}".lower()
         hit_en = next((en for en in ens if en in text), None)
         if not hit_en:
             continue
-        months = _months_until(r["entry_into_force"])
-        ko, _ = ens[hit_en]
-        when = (r["entry_into_force"] or r["comment_deadline"] or "")[:10]
-        if months is not None and months <= 0:
-            tail = f" · 이미 시행({when}) — 현행 반영 여부 확인"
-        elif months is not None:
-            tail = f" · 약 {months}개월 후({when}) 시행 예정"
-        elif when:
-            tail = f" · 의견마감/시행 {when}"
-        else:
-            tail = " · 시행일 미정"
-        note = f"{r['member']} {r['document_symbol']}: {ko}({hit_en}) 관련 기준 변경 예고{tail}"
-        out.append({"member": r["member"], "symbol": r["document_symbol"],
-                    "pesticide_ko": ko, "pesticide_en": hit_en, "months": months,
-                    "when": when, "title": r["title"], "link": r["link"], "note": note})
-        db.add_alert(conn, category="UPCOMING",
-                     severity=("HIGH" if (months is not None and months <= 6) else "MEDIUM"),
-                     title=f"[예고] {ko} 기준 변경 예정 ({r['member']})", body=note, source="WTO")
-    return out
+        ko = ens[hit_en]
+        member = r["member"]
+        source = TRACKED_MEMBERS.get(member)
+        eif = (r["entry_into_force"] or "")[:10]
+        days = _days_until(eif)
+        base = {"member": member, "symbol": r["document_symbol"], "pesticide_ko": ko,
+                "pesticide_en": hit_en, "title": r["title"], "link": r["link"],
+                "entry_into_force": eif, "comment_deadline": (r["comment_deadline"] or "")[:10]}
+
+        if days is None:                      # 시행일 미정 → 의견마감이 남았으면 대비, 아니면 숨김
+            cd_days = _days_until(r["comment_deadline"])
+            if cd_days is not None and cd_days >= 0:
+                prepare.append({**base, "days": cd_days, "when": base["comment_deadline"],
+                                "basis": "의견마감"})
+            else:
+                hidden["undated"] += 1
+            continue
+
+        if days > 0:                          # 아직 도래하지 않음 → 대비
+            prepare.append({**base, "days": days, "when": eif, "basis": "시행"})
+            continue
+
+        # 이미 시행됨
+        if source is None:                    # 우리가 그 나라 기준을 수집하지 않음 → 판정 불가, 숨김
+            hidden["out_of_scope"] += 1
+            continue
+        collected = (last_ok.get(source) or "")[:10]
+        if collected and collected >= eif:    # 발효 이후에 정상 수집 → 현행값에 이미 반영됨
+            hidden["reflected"] += 1
+            continue
+        urgent.append({**base, "days": days, "when": eif, "source": source,
+                       "last_success": collected or "없음"})
+
+    prepare.sort(key=lambda x: x["days"])
+    urgent.sort(key=lambda x: x["days"])
+
+    return {"urgent": urgent, "prepare": prepare, "hidden": hidden}
+
+
+def eping_evidence(conn, source: str, pesticide_en: str) -> str | None:
+    """지침≠현행으로 판정된 건에 대해 '왜·언제 바뀌었는지' 근거가 될 SPS 통보문을 찾는다.
+
+    같은 회원국이 그 성분으로 낸 통보문 중 가장 최근 것 1건 → '문서번호|시행일|링크'.
+    없으면 None (근거 없음을 근거 있음처럼 꾸미지 않는다).
+    """
+    member = next((m for m, s in TRACKED_MEMBERS.items() if s == source), None)
+    if not member:
+        return None
+    r = conn.execute(
+        "SELECT document_symbol,entry_into_force,distribution_date,link,title "
+        "FROM sps_notifications WHERE member=? AND (lower(title) LIKE ? OR lower(products) LIKE ?) "
+        "ORDER BY COALESCE(entry_into_force, distribution_date) DESC LIMIT 1",
+        (member, f"%{pesticide_en.lower()}%", f"%{pesticide_en.lower()}%")).fetchone()
+    if not r:
+        return None
+    when = (r["entry_into_force"] or r["distribution_date"] or "")[:10]
+    return "|".join([r["document_symbol"] or "", when, r["link"] or "", (r["title"] or "")[:120]])
+
+
+def emit_eping_alerts(conn, eping: dict) -> None:
+    """분류 결과를 알림으로 발행. 숨김 대상은 알림도 만들지 않는다."""
+    urgent, prepare = eping["urgent"], eping["prepare"]
+    for u in urgent:
+        db.add_alert(
+            conn, category="UNREFLECTED", severity="CRITICAL",
+            title=f"[미반영] {member_label(u['member'])} {u['pesticide_ko']} 기준 변경 시행 — 즉시 확인",
+            body=(f"{u['entry_into_force']} 시행({dday(u['days'])})된 변경이 우리 데이터에 반영됐다는 근거가 없습니다.\n"
+                  f"근거자료: {u['symbol']} · {u['title']}\n{u['link']}\n"
+                  f"{u['source']} 마지막 정상수집 {u['last_success']} < 발효일 {u['entry_into_force']}\n"
+                  f"→ {u['source']} 수집을 즉시 재실행하고, 지침 배포값을 현행과 대조하십시오."),
+            source="WTO")
+    for p in prepare:
+        db.add_alert(
+            conn, category="UPCOMING", severity=_upcoming_severity(p["days"]),
+            title=f"[대비 {dday(p['days'])}] {member_label(p['member'])} {p['pesticide_ko']} 기준 변경 {p['basis']} 예정",
+            body=(f"{p['when']} {p['basis']} ({dday(p['days'])})\n"
+                  f"근거자료: {p['symbol']} · {p['title']}\n{p['link']}"),
+            source="WTO")
 
 
 # ---- 메인 ----
@@ -160,7 +259,8 @@ def run_comparisons(conn) -> dict:
     rows: list[dict] = []
 
     def _emit(source, commodity_ko, pest_ko, pest_en, item, status, sev, korea, foreign, detail,
-                  published=None):
+                  published=None, ev=None):
+        ev = ev or {}
         h = health.get(source)
         hstatus = h["status"] if h else Health.UNKNOWN.value
         hfresh = h["freshness"] if h else Freshness.UNKNOWN.value
@@ -170,18 +270,15 @@ def run_comparisons(conn) -> dict:
                  korea_mrl=(korea.display() if korea else None),
                  published_mrl=(published.display() if published else None),
                  foreign_mrl=foreign, detail=detail, data_confidence=conf.value,
+                 source_url=ev.get("source_url"), basis=ev.get("basis"),
+                 changed_at=ev.get("changed_at"), evidence=ev.get("evidence"),
                  source_status=hstatus, source_freshness=hfresh,
                  last_success_at=(h["last_success_at"] if h else None),
                  data_date=(h["last_data_date"] if h else None))
-        conn.execute(
-            "INSERT INTO comparison_results(run_at,source,pesticide_ko,pesticide_en,commodity_ko,"
-            "item,status,severity,korea_mrl,published_mrl,foreign_mrl,detail,data_confidence,"
-            "source_status,source_freshness,last_success_at,data_date)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (run_at, r["source"], r["pesticide_ko"], r["pesticide_en"], r["commodity_ko"], r["item"],
-             r["status"], r["severity"], r["korea_mrl"], r["published_mrl"], r["foreign_mrl"], r["detail"],
-             r["data_confidence"], r["source_status"], r["source_freshness"],
-             r["last_success_at"], r["data_date"]))
+        # 컬럼 목록을 dict 에서 만든다 — 필드가 늘 때마다 ?의 개수를 세지 않도록.
+        cols = ["run_at", *r]
+        conn.execute(f"INSERT INTO comparison_results({','.join(cols)})"
+                     f" VALUES({','.join('?' * len(cols))})", [run_at, *r.values()])
         rows.append(r)
 
     for commodity_ko in COMMODITIES:
@@ -193,7 +290,7 @@ def run_comparisons(conn) -> dict:
                 published = rda_published(conn, commodity_ko, pest_ko, target)
                 if published is None:
                     continue  # 지침에 없는 (성분×작물×국가)는 비교대상 아님(수출조합만 수록)
-                live = live_mrl(conn, source, en, commodity_ko)
+                live, ev = live_row(conn, source, en, commodity_ko)
                 h = health.get(source)
                 hstatus = h["status"] if h else Health.UNKNOWN.value
                 healthy = hstatus in (Health.HEALTHY.value, Health.WARNING.value)
@@ -214,12 +311,15 @@ def run_comparisons(conn) -> dict:
                     if live.note:
                         detail += f" · {live.note}"
                     foreign = live.display()
+                if status == RegStatus.FOREIGN_CHANGED:
+                    ev = {**ev, "evidence": eping_evidence(conn, source, en)}
                 _emit(source, commodity_ko, pest_ko, en, "GUIDELINE", status, sev, korea, foreign, detail,
-                      published=published)
+                      published=published, ev=ev)
 
                 if status == RegStatus.FOREIGN_CHANGED:
                     db.add_alert(conn, category="REGULATION", severity=sev.value,
-                                 title=f"[지침갱신] {source} {commodity_ko}/{en}", body=detail, source=source)
+                                 title=f"[지침갱신] {member_label(source)} {commodity_ko}/{pest_ko}",
+                                 body=detail, source=source)
 
                 # (부가) 국내 vs 현행 = 수출 여유 참고
                 if live is not None and korea is not None and \
@@ -239,9 +339,10 @@ def run_comparisons(conn) -> dict:
                       f"⚠ EU에서 {en} 미승인(Not approved, 만료 {reg['expiry_date']}). "
                       f"지침은 아직 {commodity_ko}에 배포 중 → EU 수출용 사용 불가로 갱신 필요")
                 db.add_alert(conn, category="REGISTRATION", severity="CRITICAL",
-                             title=f"[수출불가] EU {commodity_ko}/{en} 미승인",
+                             title=f"[수출불가] {member_label('EU')} {commodity_ko}/{pest_ko} 미승인",
                              body=f"{en} EU 미승인(만료 {reg['expiry_date']}). 지침에서 제외 검토 필요.", source="EU")
 
-    upcoming = upcoming_from_eping(conn)
+    eping = classify_eping(conn)
+    emit_eping_alerts(conn, eping)
     conn.commit()
-    return {"comparisons": rows, "upcoming": upcoming}
+    return {"comparisons": rows, "eping": eping}

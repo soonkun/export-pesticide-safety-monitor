@@ -37,13 +37,17 @@ def _text(s: str) -> str:
     return re.sub(r"\s+", " ", _TAG.sub("", s)).strip()
 
 
-def parse_detail(page: str) -> dict[str, tuple[str, str]]:
-    """상세 페이지 → {식품명: (본 기준, 경과조치 기한부 기준)}."""
-    table: dict[str, tuple[str, str]] = {}
+def parse_detail(page: str) -> dict[str, tuple[str, str, str]]:
+    """상세 페이지 → {식품명: (본 기준, 경과조치 기한부 기준, 설정근거)}.
+
+    설정근거(Basis of setting)는 'Ab2015' 처럼 그 기준이 어느 고시로 언제 정해졌는지를 가리킨다
+    — 담당자에게 "언제 바뀐 건지"의 1차 근거가 된다.
+    """
+    table: dict[str, tuple[str, str, str]] = {}
     for row in _ROW.findall(page):
         tds = [_text(c) for c in _TD.findall(row)]
         if len(tds) >= 2:
-            table[tds[0]] = (tds[1], tds[4] if len(tds) > 4 else "")
+            table[tds[0]] = (tds[1], tds[4] if len(tds) > 4 else "", tds[2] if len(tds) > 2 else "")
     return table
 
 
@@ -97,7 +101,8 @@ class JapanCollector(BaseCollector):
                              schema_hash=sha("FoodType|MRL|Basis|Note|TimeLimit"))
 
     def _detail(self, conn, s, pid: str, english: str) -> int:
-        d = s.get(FFCR + "pesticide_detail?id=" + pid, timeout=40)
+        url = FFCR + "pesticide_detail?id=" + pid
+        d = s.get(url, timeout=40)
         table = parse_detail(d.text)
         if not table:
             raise ParserError(f"FFCR 상세표 파싱 실패(id={pid}, {english})")
@@ -109,18 +114,19 @@ class JapanCollector(BaseCollector):
                 continue
             cell = table.get(jp)
             note = None
+            basis = cell[2] if cell else ""
             if cell is None:
                 mrl = Mrl(MrlKind.NORMAL, value=UNIFORM_LIMIT, raw="0.01(일률기준)",
                           is_default=True)
                 note = "고시 개별기준 없음 → 포지티브리스트 일률기준 0.01 적용"
             else:
-                main, provisional = cell
+                main, provisional, _basis = cell
                 mrl = parse_scalar(main or provisional or None)
                 if main and provisional:
                     # 경과조치: 괄호 안 기한까지는 기한부 값이 유효하고 그 뒤 본 기준으로 바뀐다.
                     note = f"경과조치 {provisional} 까지 유효 → 이후 {mrl.display()}"
             db.record_foreign_mrl(conn, source=self.name, pesticide_en=english,
                                   commodity_ko=commodity_ko, commodity_src=jp, mrl=mrl,
-                                  note=note)
+                                  note=note, source_url=url, basis=basis)
             n += 1
         return n

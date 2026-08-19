@@ -57,3 +57,41 @@ def lookup_commodity(korean_name: str) -> tuple[dict | None, Mapping]:
     if key in COMMODITIES:
         return COMMODITIES[key], Mapping.EXACT
     return None, Mapping.UNMAPPED
+
+
+# ---- WTO ePing 회원국 표기 → (약어, ISO2) ----
+# 보고서에는 "United States of America" 대신 🇺🇸 USA 로만 찍는다. 본문에서 "미국은~"으로
+# 서술할 것이므로 표/목록에서는 식별만 되면 충분하다.
+MEMBERS: dict[str, tuple[str, str]] = {
+    "United States of America": ("USA", "US"),
+    "United Kingdom": ("UK", "GB"),
+    "European Union": ("EU", "EU"),
+    "EU": ("EU", "EU"),           # source 이름으로도 조회된다
+
+    "Korea, Republic of": ("KR", "KR"),
+    "Saudi Arabia, Kingdom of": ("SA", "SA"),
+    "Chinese Taipei": ("TW", "TW"),
+    "Russian Federation": ("RU", "RU"),
+    "Viet Nam": ("VN", "VN"),
+    "New Zealand": ("NZ", "NZ"),
+    "El Salvador": ("SV", "SV"),
+    "Türkiye": ("TR", "TR"),
+    "Japan": ("JP", "JP"), "Brazil": ("BR", "BR"), "Canada": ("CA", "CA"),
+    "Australia": ("AU", "AU"), "China": ("CN", "CN"), "Israel": ("IL", "IL"),
+    "Switzerland": ("CH", "CH"), "Norway": ("NO", "NO"), "Poland": ("PL", "PL"),
+    "Chile": ("CL", "CL"), "Colombia": ("CO", "CO"), "Panama": ("PA", "PA"),
+    "Uruguay": ("UY", "UY"), "Thailand": ("TH", "TH"), "Malaysia": ("MY", "MY"),
+    "Indonesia": ("ID", "ID"), "Philippines": ("PH", "PH"), "Morocco": ("MA", "MA"),
+    "Kazakhstan": ("KZ", "KZ"), "Ukraine": ("UA", "UA"), "Kenya": ("KE", "KE"),
+    "Uganda": ("UG", "UG"), "Tanzania": ("TZ", "TZ"), "Rwanda": ("RW", "RW"),
+    "Burundi": ("BI", "BI"),
+}
+
+
+def member_label(name: str | None) -> str:
+    """'United Kingdom' → '🇬🇧 UK'. 표에 없는 회원국은 원문 그대로(깃발 없이)."""
+    abbr, iso = MEMBERS.get((name or "").strip(), ("", ""))
+    if not iso:
+        return (name or "?").strip()
+    flag = "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in iso)
+    return f"{flag} {abbr}"

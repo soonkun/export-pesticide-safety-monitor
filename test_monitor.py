@@ -3,7 +3,9 @@ from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
 from src.compare import guideline_verdict
 from src.models import MrlKind, RegStatus, Severity
 from src.normalize import parse_scalar
-from src.report import _cell, _matrix_html
+from src.compare import dday
+from src.masters import member_label
+from src.report import _rows_html, _verdict, _why_html, guideline_rows
 
 FIXTURE = """
 <table><thead><tr><th>Food Type</th><th>MRLs(ppm)</th><th>Basis</th><th>Note</th>
@@ -15,8 +17,8 @@ FIXTURE = """
 
 def test_japan_parse():
     t = parse_detail(FIXTURE)
-    assert t["Apple"] == ("0.5", ""), t
-    assert t["Strawberry"] == ("1", "2 (2026.10.06)"), t
+    assert t["Apple"] == ("0.5", "", "Ab2010"), t
+    assert t["Strawberry"] == ("1", "2 (2026.10.06)", "Ab2015"), t   # 본기준·경과조치·설정근거
     assert "Grape" not in t                    # 표에 없는 작물 → 일률기준 경로로 간다
     assert UNIFORM_LIMIT == 0.01
 
@@ -40,20 +42,36 @@ def test_verdict():
     assert parse_scalar("0.01(일률기준)").kind is MrlKind.NORMAL
 
 
-def test_matrix_cells():
-    changed = {"status": "FOREIGN_CHANGED", "published_mrl": "2", "foreign_mrl": "1",
-               "detail": "지침 2 → 현행 1", "data_confidence": "HIGH"}
-    assert "<s>2</s> 1" in _cell(changed)
-    assert _cell(None) == "<td class=nil>·</td>"
-    assert ">0.5<" in _cell(None, "0.5")            # 지침 대상국 아님 → 회색 참고값
-    assert "◦" in _cell({**changed, "data_confidence": "LOW"})   # 최신성 미확인 표시
+def test_dday():
+    assert dday(30) == "D-30" and dday(0) == "D-DAY" and dday(-5) == "D+5" and dday(None) == "D-?"
 
-    comps = [{"item": "GUIDELINE", "commodity_ko": "딸기", "pesticide_ko": "아바멕틴",
-              "pesticide_en": "Abamectin", "source": "Japan", "korea_mrl": "0.1",
-              "foreign_mrl": "0.2", "status": "MATCH", "detail": "", "data_confidence": "HIGH"}]
-    h = _matrix_html(comps, {("EU", "Abamectin", "딸기"): "0.08"})
-    assert "아바멕틴" in h and "0.2" in h and "0.08" in h
-    assert "포도" not in h                          # 값 없는 작물 행은 만들지 않는다
+
+def test_member_label():
+    assert member_label("United Kingdom") == "🇬🇧 UK"
+    assert member_label("United States of America") == "🇺🇸 USA"
+    assert member_label("Atlantis") == "Atlantis"        # 모르는 회원국은 지어내지 않는다
+
+
+def test_rows_show_published_vs_current():
+    changed = {"item": "GUIDELINE", "commodity_ko": "딸기", "pesticide_ko": "스피네토람",
+               "pesticide_en": "Spinetoram", "source": "Japan", "korea_mrl": "0.2",
+               "published_mrl": "2", "foreign_mrl": "1", "status": "FOREIGN_CHANGED",
+               "severity": "CRITICAL", "detail": "지침 2 → 현행 1", "data_confidence": "HIGH",
+               "basis": "Ab2025", "changed_at": "2026-08-19 최초 확인",
+               "source_url": "https://db.ffcr.or.jp/x", "evidence": None}
+    h = _rows_html([changed])
+    assert ">2<" in h and ">1<" in h                     # 지침값과 현행값이 함께 보인다
+    assert "Ab2025" in h and "db.ffcr.or.jp" in h        # 근거와 원문 링크
+    assert "2026-08-19" in h                             # 시점
+    assert _verdict(changed)[0] == "🔴 다름"
+    assert "엄격" in _verdict(changed)[1]
+
+    assert "근거자료 없음" in _why_html({"basis": None, "changed_at": None, "source_url": None})
+    # 국내 MRL 비교(EXPORT_MARGIN)와 일치 건은 본표에서 빠진다 — 볼 이유가 없다
+    diff, same = guideline_rows([changed, {**changed, "item": "EXPORT_MARGIN"},
+                                 {**changed, "status": "MATCH"}])
+    assert len(diff) == 1 and len(same) == 1
+    assert "일치합니다" in _rows_html([])
 
 
 if __name__ == "__main__":

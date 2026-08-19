@@ -37,7 +37,9 @@ def run_daily(notify: bool = True) -> dict:
     print("[2/4] 표준화·변경탐지·비교 …")
     from .compare import run_comparisons
     res = run_comparisons(conn)
-    print(f"      비교결과 {len(res['comparisons'])}건 · 변경예고 {len(res['upcoming'])}건")
+    e = res["eping"]
+    print(f"      비교결과 {len(res['comparisons'])}건 · 미반영 {len(e['urgent'])}건 · "
+          f"대비 {len(e['prepare'])}건 · 숨김 {sum(e['hidden'].values())}건")
     print("[3/4] 보고서 생성 …")
     rep = report.build(conn)
     print(f"      대시보드: {rep['dashboard_path']}")

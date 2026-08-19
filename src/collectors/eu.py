@@ -48,8 +48,12 @@ class EuCollector(BaseCollector):
                 if rec is None:
                     continue
                 mrl = parse_eu(rec.get("MRL_VALUE"), rec.get("MRL_LOD"), rec.get("MRL_DISPLAY"))
+                # 근거: 이 값을 실제로 읽어온 API 질의 URL(재확인 가능) + 각주
+                url = (f"{EU_BASE}/product-current-mrl-all-residues?PRODUCT_ID={pid}"
+                       f"&format=json&api-version={EU_API_VERSION}")
                 db.record_foreign_mrl(conn, source=self.name, pesticide_en=en,
-                                      commodity_ko=commodity_ko, commodity_src=cm["eu_code"], mrl=mrl)
+                                      commodity_ko=commodity_ko, commodity_src=cm["eu_code"], mrl=mrl,
+                                      source_url=url, basis=(rec.get("MRL_FOOTNOTE") or ""))
                 stored += 1
 
         # 유효성분 등록/승인 상태 (수출 가부 판정용)
