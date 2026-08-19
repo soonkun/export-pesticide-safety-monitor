@@ -122,4 +122,10 @@ src/
 ## 보안
 
 - 인증키는 `.env`에만 두며 커밋되지 않습니다(`.gitignore`). `.env.example`로 형식만 공유.
+- `.env`는 **0600(소유자 전용)** 이어야 합니다 — 공유 스토리지에 644로 두면 동일 그룹 사용자가
+  RDA/WTO 키·SMTP 비밀번호·관제 비밀번호를 전부 읽습니다. `install-systemd.sh`가 강제합니다.
+  ```bash
+  chmod 600 .env && stat -c '%a %U %n' .env   # 600 이어야 정상
+  ```
+- 관제 콘솔은 공개 URL로 뜨므로 HTTP Basic 인증 필수. `OPS_PASS` 미설정 시 서버가 기동을 거부합니다.
 - LLM은 규정 일치 여부를 확정하지 않습니다(§5). 구조화 값 비교는 전부 deterministic code.

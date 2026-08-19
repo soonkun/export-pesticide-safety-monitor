@@ -6,15 +6,21 @@ APP="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="${SUDO_USER:-$(id -un)}"
 ENV_FILE="$APP/.env"
 
+# .env 에는 RDA/WTO 키·SMTP 비밀번호·관제 비밀번호가 들어간다.
+# 공유 경로에 644 로 놓이면 동일 그룹 사용자가 전부 읽으므로 소유자 전용으로 고정한다.
+touch "$ENV_FILE"
+chown "$USER_NAME" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
 # OPS_PASS 없으면 생성 (관제 페이지 Basic 인증). 비밀번호 없이는 API가 뜨지 않는다.
 if ! grep -q '^OPS_PASS=.\+' "$ENV_FILE" 2>/dev/null; then
   PASS="$(head -c 18 /dev/urandom | base64 | tr -d '/+=')"
   sed -i '/^OPS_PASS=/d' "$ENV_FILE" 2>/dev/null || true
   printf '\nOPS_USER=admin\nOPS_PASS=%s\n' "$PASS" >> "$ENV_FILE"
-  echo "생성된 관제 비밀번호: admin / $PASS   (.env 에 저장됨)"
+  echo "생성된 관제 비밀번호: admin / $PASS   (.env 에 저장됨, 0600)"
 fi
 
-write() { cat > "/etc/systemd/system/$1"; echo "  + /etc/systemd/system/$1"; }
+write() { cat > "/etc/systemd/system/$1"; chmod 644 "/etc/systemd/system/$1"; echo "  + /etc/systemd/system/$1"; }
 
 write pesticide-monitor.service <<UNIT
 [Unit]
