@@ -22,6 +22,7 @@
 | Japan (FFCR) | 일본 현행 MRL(포지티브리스트) | 폼 세션 + HTML 표 | — | ✅ |
 | USA (eCFR) | 미국 현행 MRL — 40 CFR Part 180 | REST API (XML, 무키) | — | ✅ |
 | Taiwan (TFDA) | 대만 현행 MRL — 農藥殘留容許量標準 | 정부 오픈데이터 API (무키) | — | ✅ |
+| Indonesia (SNI 7313) | 인니 현행 MRL | **담당자 수동 입력 CSV** (원문 사이트 해외 차단) | — | ⏳ 파일 대기 |
 
 ### 대조 범위 (중요)
 
@@ -32,8 +33,25 @@
 | 사유 | 조합 | 비고 |
 |---|---|---|
 | 대조함 | 36 | 일본 18작목(FFCR) · 대만 13작목(TFDA) · 미국 4작목(eCFR) · EU 1작목(DG SANTE) |
-| 현행 기준 소스 미연결 | 31 | 인도네시아·중국·홍콩·캐나다·호주·태국·뉴질랜드·러시아·싱가폴 — 수집기 추가 필요 |
+| 현행 기준 소스 미연결 | 22 | 중국·홍콩·캐나다·호주·태국·뉴질랜드·러시아·싱가폴 — 수집기 추가 필요 |
+| 자료 입력 대기 | 9 | 인도네시아 — 수집기는 있으나 SNI 7313 CSV 입력 대기 |
 | 작목 매핑 확인 필요 | 18 | 수입국 식품분류 대응 항목을 담당자가 확정해야 함(§12) |
+
+#### 인도네시아 자료 넣는 법
+
+인니 표준 게시처(`bsn.go.id`)와 `brmp.pertanian.go.id` 가 해외 접근을 차단해 자동 수집이 불가능하다
+(2026-08-20 실측: 타임아웃 / Cloudflare 403). SNI 7313 은 2008 → 2024 로 16년 만에 개정된
+저빈도 표준이라 수동 입력으로 충분하다.
+
+```bash
+cp data/manual/indonesia_mrl.csv.example data/manual/indonesia_mrl.csv
+# SNI 7313:2024 표를 아래 형식으로 채운다 (commodity_ko 는 지침 작목명 그대로)
+#   pesticide_en,commodity_ko,mrl_ppm,standard,effective_date
+#   Azoxystrobin,사과,2,SNI 7313:2024,2024-12-01
+python -m src.pipeline --only Indonesia
+```
+
+파일이 없는 동안에는 `SOURCE_UNAVAILABLE` 로 두어 "확인하지 못함"이 화면에 그대로 남는다.
 
 ### 남은 일 (TODO)
 
@@ -47,8 +65,9 @@
    | 고추 | FFCR 에 `Chili pepper, dried` 만 있음 — 신선 고추 대응 항목 |
    | 대추·들깻잎·유자·인삼 | FFCR 개별 항목 없음 — `Other ~` 그룹 적용 여부 |
 
-2. **미연결 국가 수집기 추가** — 지침 행수 기준 인도네시아(3,171) · 중국(1,303) · 홍콩(835) 순.
-3. **EU 변경 시점** — EU Datalake API 가 MRL 레코드에 날짜를 주지 않아 `변경 감지`는 수집 이후부터 쌓인다.
+2. **인도네시아 SNI 7313 CSV 입력** (위 절차) — 지침 3,171행 · 9작목이 걸려 있다.
+3. **미연결 국가 수집기 추가** — 지침 행수 기준 중국(1,303) · 홍콩(835) · 캐나다(671) 순.
+4. **EU 변경 시점** — EU Datalake API 가 MRL 레코드에 날짜를 주지 않아 `변경 감지`는 수집 이후부터 쌓인다.
 
 자세한 근거: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/FIELD_MAPPING.md](docs/FIELD_MAPPING.md),
 [docs/MONITORING.md](docs/MONITORING.md), [docs/STEP4_VALIDATION.md](docs/STEP4_VALIDATION.md).

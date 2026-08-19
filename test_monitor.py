@@ -161,6 +161,31 @@ def test_taiwan_exclusions():
     assert not applies_to("其他梨果類(柿子除外)", "柿", c)
 
 
+def test_indonesia_manual_file(tmp=None):
+    """수동 입력 파일이 없으면 '미확인'으로 남아야 한다 — 없는 걸 있는 척하지 않는다."""
+    import src.collectors.indonesia as idn
+    from src.config import BASE_DIR
+
+    real = idn.INDONESIA_FILE
+    missing = BASE_DIR / "data" / "manual" / "__no_such_file__.csv"
+    try:
+        idn.INDONESIA_FILE = missing
+        assert idn.read_rows() == []
+        assert idn.known_commodities() == set()
+    finally:
+        idn.INDONESIA_FILE = real
+
+    sample = BASE_DIR / "data" / "manual" / "indonesia_mrl.csv.example"
+    if sample.exists():                      # 템플릿이 실제로 읽히는지도 확인
+        try:
+            idn.INDONESIA_FILE = sample
+            rows = idn.read_rows()
+            assert rows and idn.REQUIRED_COLUMNS <= set(rows[0])
+            assert "사과" in idn.known_commodities()
+        finally:
+            idn.INDONESIA_FILE = real
+
+
 def test_clip():
     long = "Maximum levels of 3-monochloropropanediol (3-MCPD), 3-MCPD fatty acid esters and glycidyl"
     s = _clip(long, 56)

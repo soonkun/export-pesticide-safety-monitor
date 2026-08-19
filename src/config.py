@@ -17,7 +17,8 @@ DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"          # 원본 스냅샷 (§9)
 OUT_DIR = BASE_DIR / "out"          # 생성된 보고서/대시보드
 DB_PATH = DATA_DIR / "pesticide.sqlite"
-for _d in (DATA_DIR, RAW_DIR, OUT_DIR):
+MANUAL_DIR = DATA_DIR / "manual"    # 자동 수집이 불가능한 소스의 담당자 입력 파일
+for _d in (DATA_DIR, RAW_DIR, OUT_DIR, MANUAL_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ---- HTTP ----
@@ -53,6 +54,10 @@ TAIWAN_MRL_URL = "https://data.fda.gov.tw/data/opendata/export/13/json"
 TAIWAN_CLASS_URL = "https://data.fda.gov.tw/data/opendata/export/16/json"   # 農作物類農產品之分類表
 TAIWAN_SOURCE_PAGE = "https://data.gov.tw/dataset/8944"
 
+# 인도네시아 SNI 7313 — 표준 게시처가 해외 접근을 차단해 자동 수집 불가. 수동 입력 파일로 받는다.
+INDONESIA_FILE = DATA_DIR / "manual" / "indonesia_mrl.csv"
+INDONESIA_STANDARD_URL = "https://www.bsn.go.id/uploads/attachment/rsni3_7313_2024_siap_jp_ver_ok.pdf"
+
 # ---- 소스 메타 (System Health / Freshness 기준, §18·§21) ----
 # expected_update_interval 단위: 일(day). 초기값이며 실주기 확인 후 조정(문서 MONITORING §5).
 SOURCES = {
@@ -62,6 +67,7 @@ SOURCES = {
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
     "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
     "Taiwan": {"country": "TW", "kind": "regulation", "interval_days": 30,  "authoritative": True},
+    "Indonesia": {"country": "ID", "kind": "regulation", "interval_days": 365, "authoritative": True},
     "WTO":   {"country": "INT", "kind": "earlywarn",  "interval_days": 1,   "authoritative": False},
 }
 

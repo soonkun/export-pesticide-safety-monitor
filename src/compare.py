@@ -21,7 +21,8 @@ from .normalize import align_pipe, split_rda_product
 
 # 지침 원문의 국가명 → 우리가 현행 기준을 수집하는 소스.
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
-COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan"}
+COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan",
+                  "인도네시아": "Indonesia"}
 IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
 
 
@@ -30,6 +31,10 @@ def commodity_mapped(source: str, commodity_ko: str) -> bool:
     cm = COMMODITIES.get(commodity_ko)
     if not cm:
         return False
+    if source == "Indonesia":
+        # 수동 입력 소스 — 파일에 실제로 들어 있는 작목만 대조 가능하다
+        from .collectors.indonesia import known_commodities
+        return commodity_ko in known_commodities()
     key = {"Japan": "japan_name", "USA": "usa_name",
            "Taiwan": "taiwan_name"}.get(source, "eu_product_id")
     return bool(cm.get(key))
@@ -43,18 +48,23 @@ def coverage(conn) -> dict:
     rows = conn.execute(
         "SELECT target_country, commodity_ko, COUNT(*) AS n FROM rda_guidelines "
         "GROUP BY 1,2 ORDER BY n DESC").fetchall()
-    covered, no_source, no_mapping = [], [], []
+    # 수집기는 붙어 있으나 아직 값을 하나도 못 받은 소스 (예: 수동 입력 파일 대기)
+    has_data = {r["source"] for r in conn.execute(
+        "SELECT DISTINCT source FROM foreign_mrls")}
+    covered, no_source, no_data, no_mapping = [], [], [], []
     for r in rows:
         item = {"country": r["target_country"], "commodity": r["commodity_ko"], "rows": r["n"]}
         src = COUNTRY_SOURCE.get(r["target_country"])
         if not src:
             no_source.append(item)
+        elif src not in has_data:
+            no_data.append({**item, "source": src})
         elif not commodity_mapped(src, r["commodity_ko"]):
             no_mapping.append(item)
         else:
             covered.append(item)
-    return {"covered": covered, "no_source": no_source, "no_mapping": no_mapping,
-            "total": len(rows)}
+    return {"covered": covered, "no_source": no_source, "no_data": no_data,
+            "no_mapping": no_mapping, "total": len(rows)}
 
 
 def _eq(a: float, b: float) -> bool:
