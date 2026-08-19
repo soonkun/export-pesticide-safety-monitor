@@ -89,6 +89,30 @@ sudo install -m755 /tmp/cloudflared /usr/local/bin/cloudflared
 journalctl -u pesticide-tunnel -n 30 | grep trycloudflare
 ```
 
+## Cloudflare Access (비밀번호 없이 로그인)
+
+Basic 인증 대신 업무 이메일 6자리 코드/SSO로 로그인. **계정에 등록된 도메인이 필요**하며
+임시 `trycloudflare.com` 주소에는 걸 수 없다.
+
+대시보드 순서 (Zero Trust, 무료 50인):
+
+1. **Networks > Tunnels > Create a tunnel** → `Cloudflared` 선택 → 이름 `pesticide-monitor`
+2. 토큰(`eyJ...`)을 복사해 `.env` 에 `CLOUDFLARE_TUNNEL_TOKEN=eyJ...`
+3. 같은 화면 **Public Hostname** 탭 → 예: `monitor` + `보유도메인.kr`,
+   Service = `HTTP` + `127.0.0.1:8000` (DNS 레코드는 자동 생성됨)
+4. **Access > Applications > Add an application** → `Self-hosted`
+   → Application domain = 3에서 만든 호스트명
+5. **Policy**: Action `Allow`, Include = `Emails`(담당자 이메일 목록) 또는
+   `Emails ending in` `@korea.kr` 같은 도메인 조건
+6. 서버에 반영:
+   ```bash
+   sudo scripts/install-systemd.sh    # 토큰 감지해서 고정 터널로 구성
+   ```
+
+이후 접속하면 Cloudflare 로그인 화면 → 이메일 코드 입력 → 콘솔. **브라우저 Basic 인증 팝업이
+한 번 더 뜨는 게 싫으면** 그때 말해주세요 — origin 은 127.0.0.1 에만 바인딩되어 cloudflared 만
+접근 가능하므로, Access 를 신뢰 경계로 삼고 origin Basic 을 끄도록 바꿔드립니다(현재는 켜져 있어야 안전).
+
 ## API (§33)
 
 `GET /status · /sources · /sources/{name}/health · /changes · /comparisons · /alerts · /history`
