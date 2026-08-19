@@ -1,5 +1,6 @@
 """핵심 로직 자체점검: python test_monitor.py  (프레임워크 없음, 네트워크 없음)"""
 from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
+from src.collectors.hongkong import parse_options, parse_report
 from src.collectors.taiwan import applies_to, build_classes
 from src.collectors.usa import build_group_index, parse_tolerances, resolve
 from src.compare import commodity_mapped, guideline_verdict
@@ -184,6 +185,29 @@ def test_indonesia_manual_file(tmp=None):
             assert "사과" in idn.known_commodities()
         finally:
             idn.INDONESIA_FILE = real
+
+
+HK_LIST = """<TR><TD title="Pear" ID='grpFP 0230'><a href="javascript:tosubmit('FP 0230'); ">Pear</a></TD></TR>
+<TR><TD title="Peach, dried" ID='grpDF 0247'><a href="javascript:tosubmit('DF 0247'); ">Peach, dried</a></TD></TR>
+<TR><TD title="Peach" ID='grpFS 0247'><a href="javascript:tosubmit('FS 0247'); ">Peach</a></TD></TR>"""
+
+HK_REPORT = """<table>
+<tr><td>Part 1/2 of the Schedule</td><td>Item</td><td>Pesticide</td><td>Residue definition</td>
+    <td>Description of food</td><td>MRL/EMRL (mg/kg)</td></tr>
+<tr><td>1</td><td>7.8</td><td>Abamectin</td><td>Sum of avermectin B1a and B1b</td>
+    <td>Pear</td><td>0.02</td></tr>
+<tr><td>1 record was found.</td></tr></table>"""
+
+
+def test_hongkong_parsers():
+    opts = parse_options(HK_LIST)
+    # 식품 id 는 Codex 품목코드이며 'Peach' 와 'Peach, dried' 는 다른 품목이다
+    assert opts["Pear"] == "FP 0230"
+    assert opts["Peach"] == "FS 0247" and opts["Peach, dried"] == "DF 0247"
+
+    rows = parse_report(HK_REPORT)
+    assert rows == [("Pear", "0.02")]          # 머리글·안내문은 걸러진다
+    assert parse_report("<table><tr><td>0 record was found.</td></tr></table>") == []
 
 
 def test_clip():

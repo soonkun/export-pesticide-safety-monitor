@@ -54,6 +54,11 @@ TAIWAN_MRL_URL = "https://data.fda.gov.tw/data/opendata/export/13/json"
 TAIWAN_CLASS_URL = "https://data.fda.gov.tw/data/opendata/export/16/json"   # 農作物類農產品之分類表
 TAIWAN_SOURCE_PAGE = "https://data.gov.tw/dataset/8944"
 
+# 홍콩 현행 MRL = Pesticide Residues in Food Regulation (Cap. 132CM) Schedule 1.
+# bulk/API 없음 — CFS 조회 시스템의 폼 세션을 그대로 따른다.
+HK_BASE = "https://www.cfs.gov.hk/english/mrl/"
+HK_SOURCE_PAGE = "https://www.cfs.gov.hk/english/mrl/index.php"
+
 # 인도네시아 SNI 7313 — 표준 게시처가 해외 접근을 차단해 자동 수집 불가. 수동 입력 파일로 받는다.
 INDONESIA_FILE = DATA_DIR / "manual" / "indonesia_mrl.csv"
 INDONESIA_STANDARD_URL = "https://www.bsn.go.id/uploads/attachment/rsni3_7313_2024_siap_jp_ver_ok.pdf"
@@ -67,7 +72,12 @@ SOURCES = {
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
     "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
     "Taiwan": {"country": "TW", "kind": "regulation", "interval_days": 30,  "authoritative": True},
-    "Indonesia": {"country": "ID", "kind": "regulation", "interval_days": 365, "authoritative": True},
+    # 보류: 표준 원문 사이트가 해외 접근을 차단해 수집 자체가 불가(2026-08-20 실측).
+    # 담당 연구사에게 실제 참고 사이트를 확인한 뒤 재개한다. deferred 인 소스는 수집을 시도하지
+    # 않으므로 매 실행마다 실패 알림을 만들지 않는다.
+    "HongKong": {"country": "HK", "kind": "regulation", "interval_days": 30, "authoritative": True},
+    "Indonesia": {"country": "ID", "kind": "regulation", "interval_days": 365, "authoritative": True,
+                  "deferred": "표준 원문 사이트 해외 접근 차단 — 참고 사이트 확인 후 재개"},
     "WTO":   {"country": "INT", "kind": "earlywarn",  "interval_days": 1,   "authoritative": False},
 }
 

@@ -58,11 +58,13 @@ def gather(conn) -> dict:
     reg_counts = {"ok": 0, "warn": 0, "fail": 0}
     for c in comps:
         reg_counts[_reg_bucket(c["status"])] += 1
+    active = [n for n, m in SOURCES.items() if not m.get("deferred")]
     sys_counts = {"ok": 0, "warn": 0, "fail": 0}
     for h in health:
-        sys_counts[_sys_bucket(h["status"] or "UNKNOWN")] += 1
-    # 아직 수집 시도 안 한 소스도 집계
-    for name in SOURCES:
+        if h["source"] in active:
+            sys_counts[_sys_bucket(h["status"] or "UNKNOWN")] += 1
+    # 아직 수집 시도 안 한 소스도 집계 (보류 소스는 제외)
+    for name in active:
         if not any(h["source"] == name for h in health):
             sys_counts["fail"] += 1
 
@@ -277,7 +279,10 @@ def _unreflected_html(urgent: list[dict]) -> str:
 def _chips_html(health: list[dict]) -> str:
     seen = {h["source"]: h for h in health}
     out = []
-    for name in SOURCES:
+    for name, meta in SOURCES.items():
+        if meta.get("deferred"):     # 보류 — 실패가 아니므로 빨간 점으로 세지 않는다
+            out.append(f'<span class="chip" title="보류: {_esc(meta["deferred"])}">⏸ {name}</span>')
+            continue
         h = seen.get(name)
         st = (h["status"] if h else "UNKNOWN") or "UNKNOWN"
         msg = (h["status_message"] if h else "") or ""
@@ -317,11 +322,11 @@ def _coverage_html(cov: dict) -> str:
 <h4>⛔ 현행 기준 소스 미연결 ({len(cov['no_source'])})</h4>
 <p class=hint>해당 국가의 현행 MRL을 자동 수집할 소스가 아직 없습니다 — 수집기 추가가 필요합니다.</p>
 <ul>{_tbl(cov['no_source'])}</ul>
-<h4>⏳ 자료 입력 대기 ({len(cov['no_data'])})</h4>
-<p class=hint>수집기는 연결돼 있으나 아직 기준값을 하나도 받지 못했습니다
- (표준 원문 사이트가 해외 접근을 차단해 담당자 수동 입력을 기다리는 경우 등).
- 상단 소스 칩의 상태 메시지에 사유가 있습니다.</p>
-<ul>{_tbl(cov['no_data'])}</ul>
+<h4>⏸ 보류 ({len(cov['deferred'])})</h4>
+<p class=hint>수집 자체가 불가능해 잠시 멈춰 둔 국가입니다
+ — {_esc(' · '.join(sorted({x['reason'] for x in cov['deferred']})) or '사유 미기재')}.
+ 재개 전까지 이 조합들은 확인되지 않습니다.</p>
+<ul>{_tbl(cov['deferred'])}</ul>
 <h4>⚠ 작목 매핑 확인 필요 ({len(cov['no_mapping'])})</h4>
 <p class=hint>소스는 연결돼 있으나 수입국 식품분류의 어느 항목에 대응하는지 담당자 확인이 필요합니다.
  근거 없이 유사 항목에 대응시키면 틀린 기준으로 대조하게 되므로 비워 둡니다.</p>

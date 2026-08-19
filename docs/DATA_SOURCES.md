@@ -219,14 +219,15 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 
 ---
 
-### 3.7 Indonesia · ⏳ 수동 입력 (자동 수집 불가)
+### 3.8 Indonesia · ⏸ 보류 (수집 불가)
 
 | 항목 | 내용 |
 |---|---|
 | 기준 | **SNI 7313:2024** — 272 성분 × 406 품목, 약 4,750 MRL 값 (SNI 7313:2008 개정) |
 | 발행 | BSN(국가표준화청) / 농업부 |
 | 자동 수집 | ❌ **불가** |
-| 수집 방식 | 담당자 수동 입력 CSV — `data/manual/indonesia_mrl.csv` |
+| 현재 상태 | **보류** (`SOURCES['Indonesia']['deferred']`) — 매 실행마다 실패 알림을 내지 않는다 |
+| 재개 조건 | 담당 연구사가 실제 참고하는 사이트 확인. 끝내 없으면 수동 입력 CSV(`data/manual/`)로 대체 |
 
 **접근 차단 실측 (2026-08-20, 이 서버 및 외부 fetch 양쪽)**
 
@@ -245,6 +246,34 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 담당자가 표준을 한 번 확보해 넣으면 다음 개정까지 유효하다. 입력값에는 `standard`(예: SNI 7313:2024)와
 `effective_date` 를 함께 받아 근거·기준일이 화면에 남는다. 파일이 없는 동안에는 `SOURCE_UNAVAILABLE`
 로 두어 "확인하지 못함"을 "이상 없음"으로 오해하지 않게 한다(§22).
+
+---
+
+### 3.7 Hong Kong · ✅ 구현·수집 중 (CFS 조회 시스템)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | 식품안전센터(CFS) / 식품환경위생서(FEHD) |
+| 근거 규정 | **Pesticide Residues in Food Regulation (Cap. 132CM) Schedule 1** |
+| 수집원 | `https://www.cfs.gov.hk/english/mrl/` — Pesticide MRL Database |
+| API 여부 | ✗ (이용약관 동의 → 성분 선택 → 식품 선택 → 조회, 세션 기반 폼) |
+| 규모 | 성분 360종 · 식품 422종 |
+| 식품 식별자 | ✅ **Codex 품목코드** (예: Pear = `FP 0230`, Peach = `FS 0247`) — 표기가 안정적 |
+| 응답 | 항목번호 / 조항 / 성분 / 잔류물정의 / 식품설명 / MRL(mg/kg) |
+
+**접근 절차 (실측 확정)**
+1. `POST mrl_preinput.php` (`acceptTC=true`) — 세션 확보
+2. `POST mrl_select_pesticide.php` (`ShowallAction=Y`) — 성분 목록 + `pest_id`
+3. `POST mrl_select_food.php` (`ShowallAction=Y`) — 식품 목록 + `food_id`(Codex 코드)
+4. `POST mrl_report.php` (`pest_id`, `food_id`) — 해당 조합의 MRL 행
+
+**주의점**
+- 버튼 필드명이 `Showall` 이 아니라 **`ShowallAction`** 이다. 틀리면 결과 없이 폼이 다시 돌아온다.
+- `Peach`(FS 0247)와 `Peach, dried`(DF 0247)는 다른 품목이다 — 정확 일치로만 고른다.
+- Codex 코드는 사이트 목록에서 매 수집마다 해석한다(코드베이스에 박지 않음).
+- 조합에 기준이 없으면 값을 만들지 않는다. 홍콩은 미등재 시 일률기준이 따로 없어
+  임의 기본값을 넣으면 틀린 판정이 된다.
+- (성분×작물) 조합마다 1회 요청이라 대상 규모에 비례해 요청이 늘어난다(현재 72회, 0.3초 간격).
 
 ---
 

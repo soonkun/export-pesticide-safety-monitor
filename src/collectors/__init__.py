@@ -3,10 +3,12 @@ from .rda import RdaCollector
 from .eu import EuCollector
 from .codex import CodexCollector
 from .japan import JapanCollector
+from .hongkong import HongKongCollector
 from .indonesia import IndonesiaCollector
 from .taiwan import TaiwanCollector
 from .usa import UsaCollector
 from .wto_eping import WtoCollector
 
 ALL_COLLECTORS = [RdaCollector, EuCollector, CodexCollector, JapanCollector,
-                  TaiwanCollector, UsaCollector, IndonesiaCollector, WtoCollector]
+                  TaiwanCollector, UsaCollector, HongKongCollector,
+                  IndonesiaCollector, WtoCollector]

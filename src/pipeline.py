@@ -13,9 +13,14 @@ from .collectors import ALL_COLLECTORS
 
 
 def collect_all(conn) -> list[dict]:
+    from .config import SOURCES
     runs = []
     for cls in ALL_COLLECTORS:
         c = cls()
+        deferred = SOURCES.get(c.name, {}).get("deferred")
+        if deferred:
+            print(f"  - {c.name:6s} {'DEFERRED':18s} {deferred}")
+            continue
         try:
             summary = c.run(conn)
         except Exception as e:  # collector.run 내부에서 대부분 처리되지만 안전망
