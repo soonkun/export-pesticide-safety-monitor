@@ -11,7 +11,10 @@ MRL 숫자를 읽을 수 없고, 호주 Schedule 20 은 문서 다운로드 경�
 from __future__ import annotations
 
 from .. import db
-from ..config import AU_SCHEDULE20_TITLE, AU_VERSIONS_URL, CN_SEARCH_URL, CN_SOURCE_PAGE
+import re
+
+from ..config import (AU_SCHEDULE20_TITLE, AU_VERSIONS_URL, CN_SEARCH_URL, CN_SOURCE_PAGE,
+                      SG_REG30_URL)
 from ..http import ParserError, SourceUnavailable
 from .base import BaseCollector, CollectResult, sha
 
@@ -107,3 +110,41 @@ class AustraliaWatchCollector(StandardWatchCollector):
                  "effective": (x.get("start") or "")[:10],
                  "revision": f"compilation {x.get('compilationNumber')} ({x.get('registerId')})",
                  "url": f"https://www.legislation.gov.au/{x.get('registerId')}"} for x in rows]
+
+
+class SingaporeWatchCollector(StandardWatchCollector):
+    """싱가폴 Food Regulations 제30조(농약 잔류) + 제9부칙.
+
+    제9부칙은 HTML 로 파싱되지만 등재 성분이 94종뿐이고 대상 12성분 중 1종(델타메트린)만
+    들어 있다. 미등재 성분에 어떤 규칙이 적용되는지(금지인지, 다른 기준을 준용하는지)를
+    규정에서 확인하지 못했으므로 **값 대조는 하지 않는다** — 모르는 규칙을 추정해 판정하면
+    없는 위반을 만들거나 실제 위반을 놓친다(§30).
+
+    대신 개정을 감시한다. SSO 는 조문 단위 판 정보를 준다:
+      provTimelineIdx / provTimelineLen  → 30조가 몇 번째 판인지
+      ValidDate=YYYYMMDD                 → 문서 시행일 이력
+    30조가 개정되면 판 수가 늘어난다.
+    """
+    name = "Singapore"
+
+    def current_standards(self, s) -> list[dict]:
+        # SSO 는 기본 UA 를 403 으로 막는다(실측) — 브라우저 UA 필요.
+        s.headers["User-Agent"] = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36")
+        try:
+            r = s.get(SG_REG30_URL, timeout=60)
+        except Exception as e:
+            raise SourceUnavailable(f"SSO 접속 실패: {e}")
+        if r.status_code != 200:
+            raise SourceUnavailable(f"SSO HTTP {r.status_code}")
+        idx = re.search(r'"provTimelineIdx":(\d+)', r.text)
+        total = re.search(r'"provTimelineLen":(\d+)', r.text)
+        dates = sorted(set(re.findall(r"ValidDate=(\d{8})", r.text)))
+        if not (idx and total and dates):
+            raise ParserError("SSO 판 정보 파싱 실패 — 페이지 구조 변경 의심")
+        latest = dates[-1]
+        return [{"code": "Food Regulations reg 30 · Ninth Schedule",
+                 "published": None,
+                 "effective": f"{latest[:4]}-{latest[4:6]}-{latest[6:]}",
+                 "revision": f"reg30 {int(idx.group(1)) + 1}/{total.group(1)}판",
+                 "url": SG_REG30_URL}]

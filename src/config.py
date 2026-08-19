@@ -59,6 +59,7 @@ CN_SEARCH_URL = "https://sppt.cfsa.net.cn:8086/db?task=indexSearch"
 CN_SOURCE_PAGE = "https://sppt.cfsa.net.cn:8086/db"
 AU_VERSIONS_URL = "https://api.prod.legislation.gov.au/v1/Versions"
 AU_SCHEDULE20_TITLE = "F2015L00468"      # ANZ Food Standards Code – Schedule 20 – MRLs
+SG_REG30_URL = "https://sso.agc.gov.sg/SL/SFA1973-RG1?ProvIds=pr30-"   # Food Regulations 30조
 
 # 캐나다 현행 MRL = Health Canada/PMRA 공개 추출 CSV(무키).
 CANADA_MRL_URL = "https://pest-control.canada.ca/pesticide-registry-api/api/extract/mrl"
@@ -88,6 +89,9 @@ SOURCES = {
               "authoritative": True, "watch": "GB 2763 이 스캔 PDF — 값 대조 불가, 개정만 감시"},
     "Australia": {"country": "AU", "kind": "regulation", "interval_days": 30,
                   "authoritative": True, "watch": "Schedule 20 문서 다운로드 경로 미확인 — 개정만 감시"},
+    "Singapore": {"country": "SG", "kind": "regulation", "interval_days": 30,
+                  "authoritative": True,
+                  "watch": "제9부칙 등재 94종뿐 · 미등재 규칙 미확인 — 개정만 감시"},
     # 보류: 표준 원문 사이트가 해외 접근을 차단해 수집 자체가 불가(2026-08-20 실측).
     # 담당 연구사에게 실제 참고 사이트를 확인한 뒤 재개한다. deferred 인 소스는 수집을 시도하지
     # 않으므로 매 실행마다 실패 알림을 만들지 않는다.

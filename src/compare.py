@@ -24,7 +24,8 @@ from .normalize import align_pipe, split_rda_product
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
 COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan",
                   "인도네시아": "Indonesia", "홍콩": "HongKong", "캐나다": "Canada",
-                  "중국": "China", "호주": "Australia"}
+                  "중국": "China", "호주": "Australia",
+                  "싱가폴": "Singapore"}
 # 개정 감시 전용 소스(watch)는 MRL 값을 만들지 않으므로 값 대조 대상이 아니다.
 # 넣어두면 "현행에서 확인 안 됨 → 삭제/등록취소 확인 필요"라는 가짜 경고가 쏟아진다.
 IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()

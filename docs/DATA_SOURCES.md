@@ -304,57 +304,29 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 |---|---|---|---|
 | 중국 | 1,303 | GB 2763 (CFSA) | **👁 개정 감시** — 원문 확보는 되나 스캔 PDF. §3.11 참조 |
 | 호주 | 441 | **👁 개정 감시 중** — FSANZ Schedule 20 (F2015L00468, 현행 컴필레이션 **F2026C00754**, 2026-07-16) | legislation.gov.au 는 **SPA** 라 `/latest/text`·`/Details/.../Download` 모두 63KB 셸만 반환. OData API(`api.prod.legislation.gov.au/v1`)로 Versions·Documents 메타(docx 713KB / pdf 1.5MB)는 조회되나 **파일 다운로드 URL 을 못 찾음** — 미해결 |
-| 태국 | 370 | ACFS | 사이트 접근 200. MRL 데이터셋 위치 미확인 |
-| 뉴질랜드 | 350 | MPI Food Notice (MRLs for Agricultural Compounds) | 접근 200. 호주 Schedule 20 과 **별개 기준**이다(상호인정은 되지만 기준 자체가 다름) |
-| 러시아 | 335 | EAEU / SanPiN | `eaeunion.org` 접근 200. 기준 문서 위치 미확인 |
-| 싱가폴 | 314 | SFA Food Regulations | `data.gov.sg` 접근 200. MRL 데이터셋 미확인 |
+| 태국 | 370 | ACFS | `acfs.go.th` 는 SPA(`#/standards`). `/standard/`·`/en/` 은 404. 내부 API 미확인 — 미해결 |
+| 뉴질랜드 | 350 | MPI Food Notice (MRLs for Agricultural Compounds) | `mpi.govt.nz` 문서·안내 페이지 모두 842B JS 셸만 반환. 호주 Schedule 20 과 **별개 기준** — 미해결 |
+| 러시아 | 335 | EAEU / SanPiN | `docs.eaeunion.org` 접근 200(62KB). 해당 기준 문서 위치 미확인 — 미해결 |
+| 싱가폴 | 314 | Food Regulations 제9부칙 | **👁 개정 감시 중** — §3.12 참조 |
 
-### 3.11 China · 👁 개정 감시 (값 판독 불가, 판 변경만 추적)
+### 3.12 Singapore · 👁 개정 감시 (값 대조는 보류)
 
 | 항목 | 내용 |
 |---|---|
-| 기준 | **GB 2763-2021** 식품안전국가표준 식품중 농약최대잔류한량 (564 성분 · 10,092 항목) + **GB 2763.1-2022**(112 성분 추가) |
-| 수집원 | 국가식품안전위험평가센터(CFSA) 식품안전국가표준 데이터검색플랫폼 |
-| 접근 | ✅ **가능** (아래 절차로 실제 다운로드 성공) |
-| 판독 | ❌ **불가** — 스캔 이미지 PDF |
+| 근거 규정 | Food Regulations (Cap. 283, Rg 1) **제30조 농약 잔류 + 제9부칙** |
+| 수집원 | Singapore Statutes Online `sso.agc.gov.sg/SL/SFA1973-RG1?ProvIds=pr30-` |
+| 주의 | 기본 User-Agent 는 **403**. 브라우저 UA 필요(실측) |
+| 감시 지표 | `provTimelineIdx`/`provTimelineLen`(30조 판 번호) · `ValidDate=YYYYMMDD`(문서 시행일) |
+| 현재 값 | reg30 **4/4판** · 문서 시행일 **2026-01-30** (문서 이력 40판) |
 
-**TLS**: `sppt.cfsa.net.cn:8086` 은 GlobalSign 정식 인증서라 **검증을 켜고 정상 접속된다**
-(`openssl s_client` verify return code 0). 조사 중 `-k` 를 쓴 것은 별개 호스트(`www.cfsa.net.cn`)
-때문이었고, 수집기에서는 TLS 검증을 끄지 않는다.
+**값 대조를 하지 않는 이유**: 제9부칙은 중첩 테이블 HTML 이라 파싱 자체는 된다
+(성분 94종 · 440행, `Column 1 물질 / Column 2 MRL(ppm) / Column 3 식품` 구조이며
+한 물질이 MRL 별로 여러 행에 걸쳐 식품 목록을 쉼표로 나열한다). 그러나 **대상 12성분 중
+등재된 것은 델타메트린 1종뿐**이고, 미등재 성분에 어떤 규칙이 적용되는지(금지인지 다른
+기준을 준용하는지)를 규정 본문에서 확인하지 못했다. 규칙을 모르는 채 "기준 없음"으로
+판정하면 없는 위반을 만들거나 실제 위반을 놓친다(§30).
 
-**접근 절차 (실측 성공, 2026-08-20)**
-```
-POST https://sppt.cfsa.net.cn:8086/db?task=indexSearch
-     isLength=9999&num_tn=99&standard_type=&keyword=농약최대잔류한량
-  → [{"CODE":"GB 2763-2021","FJ":[{"ID_F":"42C476C9-...","FACT_NAME":"...pdf"}],"PDATE":"2021-03-03",...}]
-POST https://sppt.cfsa.net.cn:8086/cfsa_aiguo
-     task=d_p&file_guid=42C476C9-DFA8-4470-95D0-05C2032D0CB4&accessData=gj
-  → 66,781,578 bytes PDF (Referer 헤더 필요)
-```
-※ 사이트에 "系统维护中" 안내가 떠 있으나 위 경로는 정상 동작했다.
-※ 플랫폼이 제시하는 현행판은 **GB 2763-2021** 이다. 일부 3자 사이트가 언급하는
-   "GB 2763-2026" 은 CFSA 공식 목록에 없어 근거로 삼지 않는다.
-
-**막힌 지점**
-```
-pdfinfo  : 420 pages
-pdffonts : (없음)
-pdfimages: 페이지마다 1240x1753 jpeg 150dpi
-pdftotext: 1~3 / 10~12 / 200~202 / 400~402 쪽 모두 추출 문자 0
-```
-중국농약정보망(ICAMA)의 다른 사본(`chinapesticide.org.cn`, 67MB / 422쪽)도 동일하게 스캔본이다.
-
-**OCR 을 하지 않는 이유**: 420쪽 중국어 표를 OCR 해 10,092개 MRL 숫자를 뽑는 것은
-한 자리만 틀려도 수출 가부 판정을 뒤집는다. 본 시스템은 규정값을 추정으로 만들지 않는다(§5·§30).
-대상 성분(12종)만 골라 부분 OCR 하는 방법도 있으나, 색인 자체가 스캔이라 쪽 특정부터 추정이 된다.
-
-**대신 하는 일 — 개정 감시**: 값을 못 읽는다고 비워두면 기준이 개정된 순간을 놓친다.
-CFSA 표준검색 API(`task=indexSearch`)는 GB 2763 판 목록을 매일 돌려주므로,
-판 번호·발표일·시행일 변화와 **새 판 등장**을 감시해 `STANDARD_CHANGED` 알림을 띄운다.
-문서를 한 번 받아두는 것은 스냅샷이지 모니터링이 아니다.
-
-**값 대조 재개 방법**: 담당 연구사가 실제로 참고하는 경로(유료 DB·기관 내부 정리본·수출협회
-자료 등)를 확인하는 것이 가장 빠르다. 확보되면 수동 입력 경로로 즉시 받을 수 있다.
+→ 미등재 시 규칙을 확인하면 파서는 이미 검증돼 있으므로 값 대조 전환은 짧다.
 
 ---
 
