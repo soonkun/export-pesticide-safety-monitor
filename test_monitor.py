@@ -1,6 +1,6 @@
 """핵심 로직 자체점검: python test_monitor.py  (프레임워크 없음, 네트워크 없음)"""
 from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
-from src.compare import guideline_verdict
+from src.compare import commodity_mapped, guideline_verdict
 from src.models import MrlKind, RegStatus, Severity
 from src.normalize import parse_scalar
 from src.compare import dday
@@ -72,6 +72,14 @@ def test_rows_show_published_vs_current():
                                  {**changed, "status": "MATCH"}])
     assert len(diff) == 1 and len(same) == 1
     assert "일치합니다" in _rows_html([])
+
+
+def test_coverage_mapping():
+    assert commodity_mapped("Japan", "양배추")          # FFCR 식품명 확인됨
+    assert not commodity_mapped("Japan", "고추")        # 대응 항목 미확정 → 대조 대상 아님
+    assert not commodity_mapped("EU", "양배추")         # EU product_id 미확인
+    assert commodity_mapped("EU", "배")
+    assert not commodity_mapped("Japan", "없는작목")
 
 
 if __name__ == "__main__":

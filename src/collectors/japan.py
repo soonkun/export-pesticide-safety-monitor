@@ -18,13 +18,14 @@ from __future__ import annotations
 import re
 
 from .. import db
+from ..config import JAPAN_BASE
 from ..http import ParserError, SourceUnavailable
 from ..masters import COMMODITIES, PESTICIDES
 from ..models import Mrl, MrlKind
 from ..normalize import parse_scalar
 from .base import BaseCollector, CollectResult, sha
 
-FFCR = "https://db.ffcr.or.jp/front/"
+FFCR = JAPAN_BASE
 UNIFORM_LIMIT = 0.01          # 포지티브리스트 일률기준(ppm)
 
 _ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)

@@ -32,6 +32,8 @@ PESTICIDE_ALIASES: dict[str, str] = {
 
 # korean_name → 매핑. codex_group=True 면 개별 commodity 없이 그룹으로 비교(사과/배→Pome fruits).
 COMMODITIES: dict[str, dict] = {
+    # japan_name 은 FFCR 상세표의 'Food Type' 표기 그대로다(실제 목록 154개와 대조해 확인).
+    # eu_product_id/codex_name 은 실측 확인한 것만 채우고, 미확인은 None 으로 둔다(§30).
     "딸기": {"english": "Strawberry", "eu_product_id": 39, "eu_code": "0152000",
              "codex_name": "Strawberry",           "codex_group": False, "japan_name": "Strawberry"},
     "포도": {"english": "Grape",      "eu_product_id": 37, "eu_code": "0151010",
@@ -40,6 +42,54 @@ COMMODITIES: dict[str, dict] = {
              "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Apple"},
     "배":   {"english": "Pear",       "eu_product_id": 24, "eu_code": "0130020",
              "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Pear"},
+
+    # --- 일본 지침에 실려 있고 FFCR 식품명이 정확히 대응하는 작목 ---
+    "가지":   {"english": "Egg plant",  "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Egg plant"},
+    "감":     {"english": "Persimmon",  "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Japanese persimmon"},
+    "멜론":   {"english": "Melon",      "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Melons"},
+    "배추":   {"english": "Chinese cabbage", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Chinese cabbage"},
+    "복숭아(넥타린 제외)": {"english": "Peach", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Peach"},
+    "부추":   {"english": "Chive",      "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "NIRA"},
+    "브로콜리": {"english": "Broccoli", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Broccoli"},
+    "상추":   {"english": "Lettuce",    "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False,
+               "japan_name": "Lettuce (including cos lettuce and leaf lettuce)"},
+    "수박":   {"english": "Watermelon", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Water melon"},
+    "양배추": {"english": "Cabbage",    "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Cabbage"},
+    "오이":   {"english": "Cucumber",   "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False,
+               "japan_name": "Cucumber (including gherkin)"},
+    "참외":   {"english": "Korean melon", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "MAKUWAURI melon"},
+    "키위":   {"english": "Kiwifruit",  "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Kiwifruit"},
+    "토마토": {"english": "Tomato",     "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Tomato"},
+    "파프리카": {"english": "Sweet pepper", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False, "japan_name": "Pimento (sweet pepper)"},
+    "호박(단호박 포함)": {"english": "Pumpkin", "eu_product_id": None, "eu_code": None,
+               "codex_name": None, "codex_group": False,
+               "japan_name": "Pumpkin (including squash)"},
+}
+
+# 지침에는 있으나 수입국 식품분류에서 어느 항목에 대응시킬지 담당자 판단이 필요한 작목 (§12).
+# 근거 없이 'Other ~' 그룹에 밀어 넣으면 틀린 기준으로 대조하게 되므로 비워 둔다.
+PENDING_COMMODITIES: dict[str, str] = {
+    "감귤": "일본 UNSHU orange, pulp / Other citrus fruits 중 어느 것인지 확인 필요 (EU product_id 미확인)",
+    "고추": "FFCR 목록에 'Chili pepper, dried' 만 있음 — 신선 고추 대응 항목 확인 필요",
+    "대추": "FFCR 개별 항목 없음 — Other Fruits 적용 여부 확인 필요",
+    "들깻잎": "FFCR 개별 항목 없음 — Other herbs 적용 여부 확인 필요",
+    "유자": "FFCR 개별 항목 없음 — Other citrus fruits 적용 여부 확인 필요",
+    "인삼": "FFCR 개별 항목 없음 — 대응 항목 확인 필요",
 }
 
 

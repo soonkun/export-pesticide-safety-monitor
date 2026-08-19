@@ -15,11 +15,23 @@
 
 | Source | 역할 | 접근 | 키 | 상태 |
 |---|---|---|---|---|
-| RDA odcloud | 국내 지침(한국+캐시 외국 MRL) | REST API `cond[..::EQ/LIKE]` | RDA_SERVICE_KEY | ✅ |
+| RDA odcloud | 국내 지침(한국+캐시 외국 MRL) — **전량 13개국 × 85조합** | REST API | RDA_SERVICE_KEY | ✅ |
 | EU DG SANTE Datalake | EU 현행 MRL·유효성분 | REST API (무키) | — | ✅ |
 | Codex (FAO/WHO) | 국제 참조 MRL | 내부 JSON 엔드포인트 | — | ✅ |
 | WTO ePing | SPS 변경예고(Early warning) | REST API | WTO_API_KEY | ✅ |
 | Japan (FFCR) | 일본 현행 MRL(포지티브리스트) | 폼 세션 + HTML 표 | — | ✅ |
+
+### 대조 범위 (중요)
+
+지침은 **13개국 × 85개 (국가×작목) 조합**을 배포한다. 이 중 현행 기준과 실제로 대조 가능한 것은
+**일본 18작목 + EU 1작목 = 19조합**이다. 나머지는 "이상 없음"이 아니라 **확인하지 못한 것**이며,
+대시보드의 `📐 대조 범위` 섹션에 국가별·사유별로 건수를 그대로 표시한다.
+
+| 사유 | 조합 | 비고 |
+|---|---|---|
+| 대조함 | 19 | 일본(FFCR)·EU(DG SANTE) |
+| 현행 기준 소스 미연결 | 59 | 대만·인도네시아·미국·중국·홍콩·캐나다·호주·태국·뉴질랜드·러시아·싱가폴 — 수집기 추가 필요 |
+| 작목 매핑 확인 필요 | 7 | 감귤·고추·인삼·유자·들깻잎·대추 — 수입국 식품분류 대응 항목을 담당자가 확정해야 함(§12) |
 
 자세한 근거: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/FIELD_MAPPING.md](docs/FIELD_MAPPING.md),
 [docs/MONITORING.md](docs/MONITORING.md), [docs/STEP4_VALIDATION.md](docs/STEP4_VALIDATION.md).

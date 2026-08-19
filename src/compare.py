@@ -19,8 +19,40 @@ from .masters import COMMODITIES, PESTICIDES, member_label
 from .models import Confidence, Freshness, Health, Mrl, MrlKind, RegStatus, Severity
 from .normalize import align_pipe, split_rda_product
 
-# 수입국 소스 (지침 정합성 비교 대상). Codex는 국제 참조(부가).
-IMPORT_SOURCES = [("EU", "EU"), ("Japan", "Japan")]
+# 지침 원문의 국가명 → 우리가 현행 기준을 수집하는 소스.
+# 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
+COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan"}
+IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
+
+
+def commodity_mapped(source: str, commodity_ko: str) -> bool:
+    """그 소스에서 이 작목을 조회할 식별자가 마스터에 있는가."""
+    cm = COMMODITIES.get(commodity_ko)
+    if not cm:
+        return False
+    return bool(cm.get("japan_name") if source == "Japan" else cm.get("eu_product_id"))
+
+
+def coverage(conn) -> dict:
+    """지침이 배포 중인 (국가×작목) 조합 중 현행과 대조 가능한 것이 얼마인지.
+
+    대조 못 하는 조합을 화면에서 지우면 "이상 없음"으로 오해된다. 건수와 사유를 남긴다.
+    """
+    rows = conn.execute(
+        "SELECT target_country, commodity_ko, COUNT(*) AS n FROM rda_guidelines "
+        "GROUP BY 1,2 ORDER BY n DESC").fetchall()
+    covered, no_source, no_mapping = [], [], []
+    for r in rows:
+        item = {"country": r["target_country"], "commodity": r["commodity_ko"], "rows": r["n"]}
+        src = COUNTRY_SOURCE.get(r["target_country"])
+        if not src:
+            no_source.append(item)
+        elif not commodity_mapped(src, r["commodity_ko"]):
+            no_mapping.append(item)
+        else:
+            covered.append(item)
+    return {"covered": covered, "no_source": no_source, "no_mapping": no_mapping,
+            "total": len(rows)}
 
 
 def _eq(a: float, b: float) -> bool:

@@ -127,30 +127,27 @@ API 또는 다운로드 파일이 있으면 HTML crawling보다 **반드시 우�
 
 ---
 
-### 3.3 Japan · ✅ 검증됨 (검색 시스템, bulk/API 미노출)
+### 3.3 Japan · ✅ 구현·수집 중 (FFCR DB, 폼 세션 + HTML 표)
 
 | 항목 | 내용 |
 |---|---|
 | 규제기관 | 소비자청(CAA) / 후생노동성(MHLW) — Positive List 제도 |
-| 공식 DB | `https://jpn-pesticides-database.go.jp/prdb/` — 残留農薬等データベース検索システム (영/일) |
-| 도움말 | `.../prdb/help/prdb_help_en.pdf` (영문 사용자 가이드) |
-| API 여부 | ⚠️ **화면상 미노출** (검색 시스템) |
-| 다운로드 | ⚠️ **bulk 다운로드 미노출** |
-| 데이터구조 | 검색축: `農薬名`(농약명) / `食品分類名`(식품분류) / `試験法`(시험법) / `表示モード`(표시모드) |
-| MRL 제공 | ✅ 基準値(MRL) |
-| 시행일 제공 | ✅ **적용개시일(施行日)을 비고란(備考)에 제공** (令和4.8.10 개정告示 이후) |
-| 시험법 제공 | ✅ 試験法 (영문판 포함) |
-| 등록상태 제공 | ✗ (여기 없음 — 농약등록은 JMAFF/ACIS 별도 소스) |
-| PHI·사용조건 | ✗ (여기 없음 — 등록정보 측) |
-| update cycle | 부정기(소비자청 消食基 통지 기반, 대략 월 단위). 페이지 최종갱신 2026-08-07 관측 |
-| crawling 필요 | ✅ **필요** — 농약×식품 폼 기반 조회 (파서 취약도 높음) |
-| authoritative | **CAA 官報(관보)** — DB 자체가 "정확한 정보는 官報으로 재확인" 명시 |
+| **실제 수집원** | `https://db.ffcr.or.jp/front/` — 공익재단법인 일본식품화학연구진흥재단(FFCR) 잔류농약기준 검색시스템 (영문판) |
+| 원문 DB | `https://jpn-pesticides-database.go.jp/prdb/` — **해외 IP/봇을 403 차단**(실측). 자동 수집 불가 |
+| API 여부 | ✗ (폼 기반) |
+| 접근 절차 | ① `GET /front/?lng=en` (세션에 영문 표기) → ② `POST /front/?m=p` (성분 첫 글자) → ③ `GET /front/pesticide_detail?id=N`. ②를 건너뛰고 ③만 호출하면 첫 화면으로 리다이렉트된다(세션 상태 필요) |
+| 상세표 컬럼 | `Food Type` / `MRLs(ppm)` / `Basis of setting` / `Note` / `MRLs(ppm)(Time limit for application)` |
+| MRL 제공 | ✅ 본 기준 + **경과조치 기한부 기준**(기한 포함) |
+| 시행일 제공 | △ `Basis of setting` 코드(예: `Ab2025`)로 **설정 고시 연도**를 알 수 있다. 원문 DB의 施行日(備考)만큼 정밀하지는 않다 |
+| 일률기준 | 표에 해당 작목 행이 없으면 포지티브리스트 **일률기준 0.01 ppm** 적용 (`is_default=True`로 개별기준과 구분) |
+| 식품명 어휘 | 상세표의 `Food Type` 표기 154종을 실측 수집해 `masters.COMMODITIES.japan_name`과 대조. 목록에 없는 이름은 매핑하지 않는다(§30) |
+| authoritative | **CAA 官報(관보)** — FFCR도 "정확한 정보는 官報으로 재확인" 명시 |
 
-**⚠️ 검증절차 (구현 전):**
-1. 도움말 PDF를 텍스트 추출하여 검색 파라미터·출력 필드·결과 구조를 확정한다. (이번 세션은 로컬 poppler 부재로 PDF 파싱 미완)
-2. 폼 submit 시 발생하는 내부 요청(POST/GET)·응답 포맷을 브라우저 network으로 확인 → 가능하면 그 내부 endpoint 사용.
-3. **bulk/API가 끝내 없다면**: 대상 농약×식품 조합만 폼 조회 → DOM 파싱. 이 경우 §30 selector fingerprint를 반드시 저장.
-4. 등록/PHI가 필요하면 JMAFF/ACIS(농약등록정보) 소스를 별도 조사 (본 STEP 범위 밖, 향후).
+**⚠️ 이용 조건:** FFCR 자료는 고시 원문이 아니라 재단 편집본이며 **무단 전재·복제를 금지**한다.
+수집값은 모니터링·내부 검토용으로만 쓰고, 지침 개정 근거로 쓸 때는 관보/후생노동성 고시 원문으로 재확인한다.
+
+**개선 여지:** 국내망에서 `jpn-pesticides-database.go.jp` 접근이 된다면 원문 DB가 施行日을 직접 제공하므로
+`JAPAN_OFFICIAL`(config.py)을 1순위로 쓰고 FFCR을 fallback으로 두는 편이 낫다. 현재는 접근 불가로 미구현.
 
 ---
 

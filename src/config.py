@@ -36,7 +36,10 @@ RDA_BASE = "https://api.odcloud.kr/api/15154138/v1/uddi:eacf7771-ca89-4612-bbe2-
 EU_BASE = "https://api.datalake.sante.service.ec.europa.eu/sante/pesticides"
 EU_API_VERSION = "v3.0"
 CODEX_DETAIL = "https://www.fao.org/fao-who-codexalimentarius/codex-texts/dbs/pestres/pesticide-detail/en/"
-JAPAN_BASE = "https://jpn-pesticides-database.go.jp/prdb/"
+# 일본 현행 MRL: 후생노동성 원문 DB(jpn-pesticides-database.go.jp)는 해외 IP/봇을 403 차단하므로
+# 고시(告示 370호)를 편집·공개하는 FFCR DB를 수집원으로 쓴다(collectors/japan.py 주석 참조).
+JAPAN_BASE = "https://db.ffcr.or.jp/front/"
+JAPAN_OFFICIAL = "https://jpn-pesticides-database.go.jp/prdb/"   # 원문(국내망에서 접근 시 우선)
 WTO_BASE = "https://api.wto.org/eping"
 
 # ---- 소스 메타 (System Health / Freshness 기준, §18·§21) ----

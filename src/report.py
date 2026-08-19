@@ -10,8 +10,8 @@ from datetime import date
 
 from . import db
 from .config import OUT_DIR, REPORT_TITLE, SOURCES
-from .compare import classify_eping, dday
-from .masters import COMMODITIES, PESTICIDES, member_label
+from .compare import classify_eping, coverage, dday
+from .masters import COMMODITIES, PENDING_COMMODITIES, PESTICIDES, member_label
 
 # 규정 상태 → 3분류 (§35)
 REG_OK = {"MATCH", "RDA_STRICTER", "NO_FOREIGN_STANDARD"}
@@ -73,6 +73,7 @@ def gather(conn) -> dict:
 
     # eping 통보문 분류 — 알림과 같은 함수를 써서 화면/알림이 갈라지지 않게 한다
     eping = classify_eping(conn)
+    cov = coverage(conn)
 
     # 담당자 조치사항 (의사결정)
     actions = {
@@ -86,7 +87,7 @@ def gather(conn) -> dict:
         "date": date.today().isoformat(),
         "health": health, "comps": comps, "alerts": alerts,
         "changes": changes, "sps": sps,
-        "live": live, "eping": eping,
+        "live": live, "eping": eping, "coverage": cov,
         "reg_counts": reg_counts, "sys_counts": sys_counts,
         "actions": actions,
         "reg_alerts": [a for a in alerts if a["category"] in ("REGULATION", "REGISTRATION")],
@@ -276,6 +277,33 @@ def _margin_html(comps: list[dict]) -> str:
         for c in rows) + "</ul>"
 
 
+def _coverage_html(cov: dict) -> str:
+    """지침이 배포 중인 조합 중 실제로 대조한 비율. 못 한 것을 숨기지 않는다."""
+    def _tbl(items, extra=lambda x: ""):
+        by_country: dict[str, list] = {}
+        for x in items:
+            by_country.setdefault(x["country"], []).append(x)
+        return "".join(
+            f"<li><b>{_esc(c)}</b> <span class=dim>{len(v)}개 작목 · 지침 {sum(i['rows'] for i in v)}행</span><br>"
+            f"<small>{_esc(' · '.join(i['commodity'] for i in v))}{extra(v)}</small></li>"
+            for c, v in sorted(by_country.items(), key=lambda kv: -sum(i["rows"] for i in kv[1])))
+
+    pend = "".join(f"<li>{_esc(k)} — <small>{_esc(v)}</small></li>"
+                   for k, v in PENDING_COMMODITIES.items())
+    return f"""<p class=hint>지침은 <b>13개국 × {cov['total']}개 (국가×작목) 조합</b>을 배포합니다.
+ 이 중 현행 기준과 실제로 대조한 것은 <b>{len(cov['covered'])}개</b>입니다.
+ 나머지는 "이상 없음"이 아니라 <b>확인하지 못한 것</b>입니다.</p>
+<h4>✅ 대조함 ({len(cov['covered'])})</h4><ul>{_tbl(cov['covered'])}</ul>
+<h4>⛔ 현행 기준 소스 미연결 ({len(cov['no_source'])})</h4>
+<p class=hint>해당 국가의 현행 MRL을 자동 수집할 소스가 아직 없습니다 — 수집기 추가가 필요합니다.</p>
+<ul>{_tbl(cov['no_source'])}</ul>
+<h4>⚠ 작목 매핑 확인 필요 ({len(cov['no_mapping'])})</h4>
+<p class=hint>소스는 연결돼 있으나 수입국 식품분류의 어느 항목에 대응하는지 담당자 확인이 필요합니다.
+ 근거 없이 유사 항목에 대응시키면 틀린 기준으로 대조하게 되므로 비워 둡니다.</p>
+<ul>{_tbl(cov['no_mapping'])}</ul>
+<h4>확인 필요 작목</h4><ul>{pend}</ul>"""
+
+
 def _fold(title: str, n: int, body: str) -> str:
     return f"<details><summary>{title} <b>{n}</b></summary>{body}</details>"
 
@@ -344,6 +372,7 @@ def render_html(g: dict) -> str:
  summary{{cursor:pointer;font-size:13.5px;color:#2d3a46;padding:2px 0}}
  details ul{{margin:8px 0 2px;padding-left:18px;font-size:12.5px}} details li{{margin:4px 0}}
  .hint{{color:var(--dim);font-size:11.5px;margin:8px 0 2px}}
+ details h4{{font-size:12.5px;margin:12px 0 4px;color:#2d3a46}}
  .foot{{color:var(--dim);font-size:11.5px;margin-top:18px}}
  @media(max-width:640px){{
    .wrap{{padding:10px 10px 32px}}
@@ -360,6 +389,7 @@ def render_html(g: dict) -> str:
 <div class=strip>
  <span class="count {'hit' if todo_n else ''}">조치 {todo_n}</span>
  <span class="count {'hit' if soon else ''}">대비 {len(a['upcoming'])}</span>
+ <span class=count title="지침이 배포 중인 (국가×작목) 조합 중 현행과 대조한 비율">대조 {len(g['coverage']['covered'])}/{g['coverage']['total']}</span>
  {_chips_html(g['health'])}
 </div>
 
@@ -375,6 +405,7 @@ def render_html(g: dict) -> str:
  지침 대상국 아님 {hid['out_of_scope']} · 시행일 미정 {hid['undated']}.
  이미 시행됐고 현행 수집에 반영된 통보문은 조치할 것이 없어 표시하지 않습니다.</p>
 
+{_fold('📐 대조 범위 — 지침 ' + str(g['coverage']['total']) + '개 조합 중 ' + str(len(g['coverage']['covered'])) + '개 대조', g['coverage']['total'], _coverage_html(g['coverage']))}
 {_fold('📌 참고 · 국내 MRL이 현행 해외기준보다 높은 건', len([c for c in g['comps'] if c['item'] == 'EXPORT_MARGIN']), _margin_html(g['comps']))}
 {_fold('🔔 알림', len(g['alerts']), f'<ul>{alerts_html}</ul>')}
 {_fold('📄 SPS 통보문 (최근)', len(g['sps']), f'<ul>{sps_html}</ul>')}
