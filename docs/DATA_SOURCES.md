@@ -302,7 +302,7 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 
 | 국가 | 지침 행수 | 소스 | 상태 |
 |---|---|---|---|
-| 중국 | 1,303 | GB 2763 (CFSA) | **⏸ 보류** — 원문 확보는 성공했으나 스캔 PDF. §3.11 참조 |
+| 중국 | 1,303 | GB 2763 (CFSA) | **👁 개정 감시** — 원문 확보는 되나 스캔 PDF. §3.11 참조 |
 | 호주 | 441 | **👁 개정 감시 중** — FSANZ Schedule 20 (F2015L00468, 현행 컴필레이션 **F2026C00754**, 2026-07-16) | legislation.gov.au 는 **SPA** 라 `/latest/text`·`/Details/.../Download` 모두 63KB 셸만 반환. OData API(`api.prod.legislation.gov.au/v1`)로 Versions·Documents 메타(docx 713KB / pdf 1.5MB)는 조회되나 **파일 다운로드 URL 을 못 찾음** — 미해결 |
 | 태국 | 370 | ACFS | 사이트 접근 200. MRL 데이터셋 위치 미확인 |
 | 뉴질랜드 | 350 | MPI Food Notice (MRLs for Agricultural Compounds) | 접근 200. 호주 Schedule 20 과 **별개 기준**이다(상호인정은 되지만 기준 자체가 다름) |
@@ -318,6 +318,10 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 | 접근 | ✅ **가능** (아래 절차로 실제 다운로드 성공) |
 | 판독 | ❌ **불가** — 스캔 이미지 PDF |
 
+**TLS**: `sppt.cfsa.net.cn:8086` 은 GlobalSign 정식 인증서라 **검증을 켜고 정상 접속된다**
+(`openssl s_client` verify return code 0). 조사 중 `-k` 를 쓴 것은 별개 호스트(`www.cfsa.net.cn`)
+때문이었고, 수집기에서는 TLS 검증을 끄지 않는다.
+
 **접근 절차 (실측 성공, 2026-08-20)**
 ```
 POST https://sppt.cfsa.net.cn:8086/db?task=indexSearch
@@ -325,7 +329,7 @@ POST https://sppt.cfsa.net.cn:8086/db?task=indexSearch
   → [{"CODE":"GB 2763-2021","FJ":[{"ID_F":"42C476C9-...","FACT_NAME":"...pdf"}],"PDATE":"2021-03-03",...}]
 POST https://sppt.cfsa.net.cn:8086/cfsa_aiguo
      task=d_p&file_guid=42C476C9-DFA8-4470-95D0-05C2032D0CB4&accessData=gj
-  → 66,781,578 bytes PDF (Referer 헤더 필요, TLS 체인 문제로 -k 필요)
+  → 66,781,578 bytes PDF (Referer 헤더 필요)
 ```
 ※ 사이트에 "系统维护中" 안내가 떠 있으나 위 경로는 정상 동작했다.
 ※ 플랫폼이 제시하는 현행판은 **GB 2763-2021** 이다. 일부 3자 사이트가 언급하는

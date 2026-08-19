@@ -68,7 +68,7 @@ class ChinaWatchCollector(StandardWatchCollector):
             r = s.post(CN_SEARCH_URL,
                        data={"isLength": "9999", "num_tn": "99", "standard_type": "",
                              "keyword": "农药最大残留限量"},
-                       headers={"Referer": CN_SOURCE_PAGE}, timeout=60, verify=False)
+                       headers={"Referer": CN_SOURCE_PAGE}, timeout=60)
         except Exception as e:
             raise SourceUnavailable(f"CFSA 접속 실패: {e}")
         if r.status_code != 200:
