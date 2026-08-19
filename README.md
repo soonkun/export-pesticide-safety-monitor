@@ -94,7 +94,11 @@ journalctl -u pesticide-tunnel -n 30 | grep trycloudflare
 Basic 인증 대신 업무 이메일 6자리 코드/SSO로 로그인. **계정에 등록된 도메인이 필요**하며
 임시 `trycloudflare.com` 주소에는 걸 수 없다.
 
-대시보드 순서 (Zero Trust, 무료 50인):
+**비용**: Access·Tunnel 은 Zero Trust Free 플랜(50인)에 포함되어 요금은 0원. 단
+(a) 무료 플랜이어도 온보딩 시 **결제수단 등록을 요구**하고(청구는 없음),
+(b) **도메인 보유 비용**은 별도(연 1~2만원대). 이 둘이 부담이면 아래 "대안" 참고.
+
+대시보드 순서:
 
 1. **Networks > Tunnels > Create a tunnel** → `Cloudflared` 선택 → 이름 `pesticide-monitor`
 2. 토큰(`eyJ...`)을 복사해 `.env` 에 `CLOUDFLARE_TUNNEL_TOKEN=eyJ...`
@@ -109,9 +113,19 @@ Basic 인증 대신 업무 이메일 6자리 코드/SSO로 로그인. **계정�
    sudo scripts/install-systemd.sh    # 토큰 감지해서 고정 터널로 구성
    ```
 
-이후 접속하면 Cloudflare 로그인 화면 → 이메일 코드 입력 → 콘솔. **브라우저 Basic 인증 팝업이
-한 번 더 뜨는 게 싫으면** 그때 말해주세요 — origin 은 127.0.0.1 에만 바인딩되어 cloudflared 만
-접근 가능하므로, Access 를 신뢰 경계로 삼고 origin Basic 을 끄도록 바꿔드립니다(현재는 켜져 있어야 안전).
+이후 접속하면 Cloudflare 로그인 화면 → 이메일 코드 입력 → 콘솔.
+(Access 를 켠 뒤에도 origin Basic 인증은 그대로 남는다. 팝업이 한 번 더 뜨는 게 거슬리면
+origin 은 127.0.0.1 바인딩이라 cloudflared 만 접근 가능하므로 Basic 을 끄는 선택지가 있다.)
+
+### 대안 (카드 등록·도메인 없이)
+
+| 방식 | 비용 | 인증 |
+|---|---|---|
+| 터널 내리고 내부망에서만 접속 | 0 | 없음(망 자체가 경계) — `http://서버IP:8000`, `.env` 에 `HOST=0.0.0.0` |
+| 터널 유지 + 강한 비밀번호 | 0 | Basic. 브라우저 비밀번호 관리자에 저장하면 실제 입력은 최초 1회뿐 |
+| Cloudflare Access | 0 (카드 등록·도메인 필요) | 이메일 6자리 코드 / SSO |
+
+공개 URL 이 꼭 필요한 게 아니라면 첫 번째가 가장 단순하고 안전하다.
 
 ## API (§33)
 
