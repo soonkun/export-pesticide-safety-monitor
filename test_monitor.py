@@ -1,11 +1,12 @@
 """핵심 로직 자체점검: python test_monitor.py  (프레임워크 없음, 네트워크 없음)"""
 from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
+from src.collectors.usa import build_group_index, parse_tolerances, resolve
 from src.compare import commodity_mapped, guideline_verdict
 from src.models import MrlKind, RegStatus, Severity
 from src.normalize import parse_scalar
 from src.compare import dday
 from src.masters import member_label
-from src.report import _rows_html, _verdict, _why_html, guideline_rows
+from src.report import _clip, _rows_html, _titled, _verdict, _why_html, guideline_rows
 
 FIXTURE = """
 <table><thead><tr><th>Food Type</th><th>MRLs(ppm)</th><th>Basis</th><th>Note</th>
@@ -72,6 +73,64 @@ def test_rows_show_published_vs_current():
                                  {**changed, "status": "MATCH"}])
     assert len(diff) == 1 and len(same) == 1
     assert "일치합니다" in _rows_html([])
+
+
+CFR_GROUPS = """<DIV8 N="180.41" TYPE="SECTION"><HEAD>&#xA7; 180.41 Crop group tables.</HEAD>
+<EXTRACT><HD1>Crop Group 11-10: Pome Fruit Group&#x2014;Commodities</HD1>
+<FP-1>Apple, <I>Malus domestica</I> Borkh.</FP-1>
+<FP-1>Pear, <I>Pyrus communis</I> L.</FP-1>
+<FP-1>Pear, Asian, <I>Pyrus pyrifolia</I> (Burm. f.) Nakai</FP-1></EXTRACT>
+<EXTRACT><HD1>Crop Group 13-07G: Low Growing Berry Subgroup&#x2014;Commodities</HD1>
+<FP-1>Strawberry, <I>Fragaria</I> spp.</FP-1>
+<FP-1>Cranberry, <I>Vaccinium macrocarpon</I> Aiton</FP-1></EXTRACT></DIV8>"""
+
+CFR_SECTION = """<TABLE><TR><TD>Apple, wet pomace</TD><TD>3.0</TD></TR>
+<TR><TD>Fruit, pome, group 11-10</TD><TD>0.60</TD></TR>
+<TR><TD>Berry, low growing subgroups 13-07G, except cranberry</TD><TD>0.90</TD></TR>
+<TR><TD>Pear, Asian <sup>1</sup></TD><TD>0.07</TD></TR></TABLE>"""
+
+
+def test_usa_group_index():
+    g = build_group_index(CFR_GROUPS)
+    assert g["11-10"] == {"apple", "pear", "pear, asian"}   # 학명·저자명은 떨어져 나간다
+    assert "pear, asian" in g["11-10"]             # 아시아배가 'pear' 로 뭉개지지 않는다
+    assert "strawberry" in g["13-07G"]
+
+
+def test_usa_resolution():
+    rows = parse_tolerances(CFR_SECTION)
+    g = build_group_index(CFR_GROUPS)
+    assert len(rows) == 4
+    assert ("Pear, Asian", "0.07") in rows         # 각주 표식 <sup>1</sup> 은 제거된다
+
+    # 사과박(가공품)을 신선 사과로 쓰면 안 된다 — 작물그룹 행을 써야 한다
+    assert resolve(rows, "Apple", g) == ("Fruit, pome, group 11-10", "0.60")
+    assert resolve(rows, "Pear", g) == ("Fruit, pome, group 11-10", "0.60")
+    # 한국 배 = 아시아배: 개별 등재가 있으면 그것을 쓴다
+    assert resolve(rows, "Pear, Asian", g) == ("Pear, Asian", "0.07")
+    # except 로 제외된 작물은 그 행을 쓰지 않는다
+    assert resolve(rows, "Strawberry", g)[1] == "0.90"   # 'subgroups'(복수) 표기도 인식
+    assert resolve(rows, "Cranberry", g) is None
+    assert resolve(rows, "Banana", g) is None       # 어느 그룹에도 없으면 값 없음
+
+    # 개별 품목 기준이 있으면 그룹보다 우선
+    direct = rows + [("Apple", "0.5")]
+    assert resolve(direct, "Apple", g) == ("Apple", "0.5")
+
+
+def test_clip():
+    long = "Maximum levels of 3-monochloropropanediol (3-MCPD), 3-MCPD fatty acid esters and glycidyl"
+    s = _clip(long, 56)
+    assert s.endswith("…") and len(s) <= 57
+    assert not s[:-1].endswith(" ")               # 잘린 끝에 공백/구두점을 남기지 않는다
+    assert long.startswith(s[:-1])                # 원문 앞부분 그대로
+    assert _clip("짧은 제목", 56) == "짧은 제목"    # 짧으면 …를 붙이지 않는다
+    assert _clip(None) == ""
+    assert _clip("A" * 80, 20).endswith("…")      # 공백 없는 긴 단어도 잘린다
+
+    h = _titled(long, "https://example.org/n")
+    assert "…" in h and "example.org" in h
+    assert long in h                              # 전체 제목은 title 속성에 남는다
 
 
 def test_coverage_mapping():

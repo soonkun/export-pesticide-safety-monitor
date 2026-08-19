@@ -151,6 +151,44 @@ API 또는 다운로드 파일이 있으면 HTML crawling보다 **반드시 우�
 
 ---
 
+### 3.5 USA · ✅ 구현·수집 중 (eCFR 공개 API, 규정 원문)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | EPA (미국 환경보호청) |
+| 수집원 | `https://www.ecfr.gov/api/versioner/v1/full/{date}/title-40.xml?part=180` — **40 CFR Part 180 전문 XML** (무키) |
+| 근거 규정 | 40 CFR Part 180: Tolerances and Exemptions for Pesticide Chemical Residues in Food |
+| 개정일 | `/api/versioner/v1/titles.json` 의 title 40 `latest_issue_date` 를 data_date 로 기록 |
+| MRL 제공 | ✅ 성분별 절(§180.xxx)의 허용량 표 (Commodity / Parts per million) |
+| authoritative | ✅ 규정 원문 자체 |
+
+**작물그룹(Crop Group) 해석 — 이 소스의 핵심 난점**
+
+EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하는 경우가 많다.
+예: 사과 기준은 `Apple` 행이 아니라 `Fruit, pome, group 11-10` 행에 있다.
+그룹 구성 작물은 **§180.41 에 규정 자체로 정의**돼 있어 추측 없이 색인할 수 있다.
+§180.41 은 두 가지 형태를 섞어 쓴다 — `<EXTRACT>` 목록(그룹 11-10 등)과 `<TABLE>`(그룹 1, 13-07 등). 둘 다 파싱한다.
+
+채택 규칙(`collectors/usa.py:resolve`):
+1. 표의 commodity 가 대상 작물명과 **정확히** 일치하면 채택(개별 기준이 그룹보다 우선).
+2. 아니면 `group NN` / `subgroup(s) NN-NNX` 를 가리키는 행 중, 그 그룹에 대상 작물이 속하고
+   `except ...` 로 제외되지 않은 행을 채택.
+3. 후보가 여러 개인데 **값이 서로 다르면 채택하지 않는다**(담당자 확인 대상).
+
+**주의해서 처리한 함정 (모두 회귀 테스트로 고정)**
+- `Apple, wet pomace`(사과박)는 **신선 사과가 아니다.** commodity 표기를 쉼표에서 자르면
+  가공품 기준(예: 디페노코나졸 25 ppm)을 신선 과실(5 ppm)에 붙이게 된다 → 쉼표를 자르지 않는다.
+- 한국 배는 **아시아배**(Pyrus pyrifolia). CFR 은 `Pear, Asian` 을 따로 등재하며 값이 다르다
+  (아족시스트로빈: pome 그룹 없음 vs Pear, Asian 0.07). `usa_name = "Pear, Asian"`.
+- §180.41 구성작물은 `이름, <I>학명</I> 저자` 형식이므로 **첫 `<I>` 앞까지**가 작물명이다.
+  쉼표로 자르면 `pear, asian` 이 `pear` 로 뭉개진다.
+- 허용량 표의 각주 표식은 `<sup>` 이다(`Pear, Asian <sup>1</sup>`) → 제거 후 비교.
+- 그룹 참조는 `subgroup` 과 `subgroups`(복수)가 섞여 쓰인다.
+- 성분명이 다를 수 있다: 아바멕틴은 `Avermectin B1 and its delta-8,9-isomer`(§180.449)로 등재
+  → `PESTICIDES[...]["usa_name"]` 로 지정.
+
+---
+
 ### 3.4 Codex (FAO/WHO) · ✅ 검증됨 (구조 확인, bulk/API 미노출)
 
 | 항목 | 내용 |

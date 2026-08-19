@@ -21,7 +21,7 @@ from .normalize import align_pipe, split_rda_product
 
 # 지침 원문의 국가명 → 우리가 현행 기준을 수집하는 소스.
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
-COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan"}
+COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA"}
 IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
 
 
@@ -30,7 +30,8 @@ def commodity_mapped(source: str, commodity_ko: str) -> bool:
     cm = COMMODITIES.get(commodity_ko)
     if not cm:
         return False
-    return bool(cm.get("japan_name") if source == "Japan" else cm.get("eu_product_id"))
+    key = {"Japan": "japan_name", "USA": "usa_name"}.get(source, "eu_product_id")
+    return bool(cm.get(key))
 
 
 def coverage(conn) -> dict:
@@ -157,7 +158,8 @@ def registration(conn, source, pesticide_en):
 # 나머지(반영 확인 / 우리가 기준을 수집하지 않는 회원국의 지난 통보)는 숨기고 건수만 남긴다.
 
 # 우리가 현행 MRL 을 직접 수집하는 회원국 → 반영 여부를 판정할 수 있다.
-TRACKED_MEMBERS = {"European Union": "EU", "Japan": "Japan"}
+TRACKED_MEMBERS = {"European Union": "EU", "Japan": "Japan",
+                   "United States of America": "USA"}
 
 
 def _days_until(d: str | None) -> int | None:
@@ -322,6 +324,11 @@ def run_comparisons(conn) -> dict:
                 published = rda_published(conn, commodity_ko, pest_ko, target)
                 if published is None:
                     continue  # 지침에 없는 (성분×작물×국가)는 비교대상 아님(수출조합만 수록)
+                if not commodity_mapped(source, commodity_ko):
+                    # 그 소스에서 이 작목을 조회할 식별자가 아직 없다.
+                    # 여기서 비교하면 "수입국이 기준을 삭제했다"로 잘못 보고된다.
+                    # 미대조 사실은 coverage() 의 '작목 매핑 확인 필요'로 이미 집계된다.
+                    continue
                 live, ev = live_row(conn, source, en, commodity_ko)
                 h = health.get(source)
                 hstatus = h["status"] if h else Health.UNKNOWN.value

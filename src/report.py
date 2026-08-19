@@ -141,12 +141,32 @@ def _verdict(c: dict) -> tuple[str, str]:
     return badge, why
 
 
+def _clip(text: str | None, n: int = 56) -> str:
+    """긴 제목을 단어 경계에서 자르고 …를 붙인다. 단어 중간에서 끊지 않는다."""
+    s = " ".join((text or "").split())
+    if len(s) <= n:
+        return s
+    cut = s[:n]
+    sp = cut.rfind(" ")
+    if sp > n * 0.6:          # 너무 앞에서 잘리면 그냥 n에서 자른다(한 단어가 긴 경우)
+        cut = cut[:sp]
+    return cut.rstrip(" ,·;:-") + "…"
+
+
+def _titled(text: str | None, url: str | None, n: int = 56) -> str:
+    """자른 제목 + 원문 링크. 전체 제목은 title 속성에 남긴다."""
+    short = _clip(text, n)
+    if not short:
+        return ""
+    body = f'<span title="{_esc(text)}">{_esc(short)}</span>'
+    return f'{body} <a href="{_esc(url)}" target=_blank rel=noopener>↗</a>' if url else body
+
+
 def _basis_html(basis: str | None) -> str:
     """설정근거 — 일본은 'Ab2025' 같은 고시 코드, EU는 긴 각주 문장이라 잘라서 보여준다."""
     if not basis:
         return ""
-    short = basis if len(basis) <= 42 else basis[:42].rstrip() + "…"
-    return f'<b title="{_esc(basis)}">{_esc(short)}</b>'
+    return f'<b title="{_esc(basis)}">{_esc(_clip(basis, 42))}</b>'
 
 
 def _why_html(c: dict) -> str:
@@ -232,7 +252,7 @@ def _prepare_html(prepare: list[dict]) -> str:
  <div class=dd>{dday(p['days'])}</div>
  <div class=who>{member_label(p['member'])} · <b>{_esc(p['pesticide_ko'])}</b></div>
  <div class=val><span class=lbl>{_esc(p['basis'])}</span> {_esc(p['when'])}</div>
- <div class=why>{link} <small>{_esc((p['title'] or '')[:100])}</small></div></div>""")
+ <div class=why>{link} <small>{_titled(p['title'], None, 64)}</small></div></div>""")
     return "".join(out)
 
 
@@ -248,7 +268,7 @@ def _unreflected_html(urgent: list[dict]) -> str:
  <div class=cty>{_esc(u['entry_into_force'])} 시행</div>
  <div class=val><b>{dday(u['days'])}</b> 경과</div>
  <div class=vd><b>🔴 미반영</b><br><small>즉시 수정</small></div>
- <div class=why>{link} <small>{_esc((u['title'] or '')[:100])}</small><br>
+ <div class=why>{link} <small>{_titled(u['title'], None, 64)}</small><br>
    <small>{_esc(u['source'])} 마지막 정상수집 {_esc(u['last_success'])} &lt; 발효일 {_esc(u['entry_into_force'])}</small></div>
  </div>""")
     return f'<h2>🔴 시행됐는데 반영 근거 없음 — 즉시 수정</h2><div class=list>{"".join(out)}</div>'
@@ -317,11 +337,11 @@ def render_html(g: dict) -> str:
 
     alerts_html = "".join(
         f"<li><b>[{_esc(x['severity'])}]</b> {_esc(x['title'])}"
-        f"<br><small>{_esc((x['body'] or '')[:220])}</small></li>"
+        f"<br><small>{_esc(_clip(x['body'], 150))}</small></li>"
         for x in g["alerts"][:30]) or "<li>없음</li>"
     sps_html = "".join(
-        f"<li><small>{_esc((s['distribution_date'] or '')[:10])} · {member_label(s['member'])}</small> "
-        f"{_esc((s['title'] or '')[:110])}</li>"
+        f"<li><small>{_esc((s['distribution_date'] or '')[:10])} · {member_label(s['member'])}</small><br>"
+        f"{_titled(s['title'], s['link'])}</li>"
         for s in g["sps"][:15]) or "<li>없음</li>"
 
     return f"""<!doctype html><html lang=ko><head><meta charset=utf-8>

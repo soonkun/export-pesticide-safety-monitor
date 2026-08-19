@@ -17,7 +17,9 @@ PESTICIDES: dict[str, dict] = {
     "보스칼리드":          {"english": "Boscalid",           "codex_pid": 221, "cas": "188425-85-6"},
     "사이프로디닐":        {"english": "Cyprodinil",         "codex_pid": 207, "cas": "121552-61-2"},
     "아세타미프리드":      {"english": "Acetamiprid",        "codex_pid": 246, "cas": "135410-20-7"},
-    "아바멕틴":            {"english": "Abamectin",          "codex_pid": 177, "cas": "71751-41-2"},
+    # 아바멕틴은 40 CFR 180 에 'Avermectin B1 and its delta-8,9-isomer'(§180.449)로 등재돼 있다.
+    "아바멕틴":            {"english": "Abamectin",          "codex_pid": 177, "cas": "71751-41-2",
+                            "usa_name": "Avermectin B1"},
     "클로란트라닐리프롤":  {"english": "Chlorantraniliprole","codex_pid": 230, "cas": "500008-45-7"},
     "델타메트린":          {"english": "Deltamethrin",       "codex_pid": 135, "cas": "52918-63-5"},
     "이미다클로프리드":    {"english": "Imidacloprid",       "codex_pid": 206, "cas": "138261-41-3"},
@@ -35,13 +37,18 @@ COMMODITIES: dict[str, dict] = {
     # japan_name 은 FFCR 상세표의 'Food Type' 표기 그대로다(실제 목록 154개와 대조해 확인).
     # eu_product_id/codex_name 은 실측 확인한 것만 채우고, 미확인은 None 으로 둔다(§30).
     "딸기": {"english": "Strawberry", "eu_product_id": 39, "eu_code": "0152000",
-             "codex_name": "Strawberry",           "codex_group": False, "japan_name": "Strawberry"},
+             "codex_name": "Strawberry",           "codex_group": False, "japan_name": "Strawberry",
+             "usa_name": "Strawberry"},
     "포도": {"english": "Grape",      "eu_product_id": 37, "eu_code": "0151010",
-             "codex_name": "Grapes",               "codex_group": False, "japan_name": "Grape"},
+             "codex_name": "Grapes",               "codex_group": False, "japan_name": "Grape",
+             "usa_name": "Grape"},
     "사과": {"english": "Apple",      "eu_product_id": 23, "eu_code": "0130010",
-             "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Apple"},
+             "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Apple",
+             "usa_name": "Apple"},
     "배":   {"english": "Pear",       "eu_product_id": 24, "eu_code": "0130020",
-             "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Pear"},
+             "codex_name": "Pome fruits (group)",  "codex_group": True,  "japan_name": "Pear",
+             # 한국 배는 신고·원황 등 아시아배(Pyrus pyrifolia) — CFR 은 'Pear, Asian' 을 따로 등재한다
+             "usa_name": "Pear, Asian"},
 
     # --- 일본 지침에 실려 있고 FFCR 식품명이 정확히 대응하는 작목 ---
     "가지":   {"english": "Egg plant",  "eu_product_id": None, "eu_code": None,

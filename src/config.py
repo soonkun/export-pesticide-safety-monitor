@@ -42,6 +42,11 @@ JAPAN_BASE = "https://db.ffcr.or.jp/front/"
 JAPAN_OFFICIAL = "https://jpn-pesticides-database.go.jp/prdb/"   # 원문(국내망에서 접근 시 우선)
 WTO_BASE = "https://api.wto.org/eping"
 
+# 미국 현행 MRL = 40 CFR Part 180. eCFR 이 규정 전문을 XML로 공개(무키).
+USA_CFR_DATE_URL = "https://www.ecfr.gov/api/versioner/v1/titles.json"
+USA_CFR_PART_URL = "https://www.ecfr.gov/api/versioner/v1/full/{date}/title-40.xml?part=180"
+USA_SECTION_URL = "https://www.ecfr.gov/current/title-40/section-{section}"
+
 # ---- 소스 메타 (System Health / Freshness 기준, §18·§21) ----
 # expected_update_interval 단위: 일(day). 초기값이며 실주기 확인 후 조정(문서 MONITORING §5).
 SOURCES = {
@@ -49,6 +54,7 @@ SOURCES = {
     "EU":    {"country": "EU",  "kind": "regulation", "interval_days": 2,   "authoritative": True},
     "Japan": {"country": "JP",  "kind": "regulation", "interval_days": 45,  "authoritative": True},
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
+    "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
     "WTO":   {"country": "INT", "kind": "earlywarn",  "interval_days": 1,   "authoritative": False},
 }
 

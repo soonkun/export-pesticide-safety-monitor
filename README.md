@@ -20,6 +20,7 @@
 | Codex (FAO/WHO) | 국제 참조 MRL | 내부 JSON 엔드포인트 | — | ✅ |
 | WTO ePing | SPS 변경예고(Early warning) | REST API | WTO_API_KEY | ✅ |
 | Japan (FFCR) | 일본 현행 MRL(포지티브리스트) | 폼 세션 + HTML 표 | — | ✅ |
+| USA (eCFR) | 미국 현행 MRL — 40 CFR Part 180 | REST API (XML, 무키) | — | ✅ |
 
 ### 대조 범위 (중요)
 
@@ -29,9 +30,24 @@
 
 | 사유 | 조합 | 비고 |
 |---|---|---|
-| 대조함 | 19 | 일본(FFCR)·EU(DG SANTE) |
-| 현행 기준 소스 미연결 | 59 | 대만·인도네시아·미국·중국·홍콩·캐나다·호주·태국·뉴질랜드·러시아·싱가폴 — 수집기 추가 필요 |
-| 작목 매핑 확인 필요 | 7 | 감귤·고추·인삼·유자·들깻잎·대추 — 수입국 식품분류 대응 항목을 담당자가 확정해야 함(§12) |
+| 대조함 | 23 | 일본 18작목(FFCR) · 미국 4작목(eCFR) · EU 1작목(DG SANTE) |
+| 현행 기준 소스 미연결 | 49 | 대만·인도네시아·중국·홍콩·캐나다·호주·태국·뉴질랜드·러시아·싱가폴 — 수집기 추가 필요 |
+| 작목 매핑 확인 필요 | 13 | 수입국 식품분류 대응 항목을 담당자가 확정해야 함(§12) |
+
+### 남은 일 (TODO)
+
+1. **작목 매핑 확정 — 담당자 판단 필요.** 아래 작목은 수입국 식품분류에서 어느 항목에 대응하는지
+   근거가 없어 비워 두었다. 근거 없이 유사 항목(`Other ~` 그룹 등)에 붙이면 **틀린 기준으로 대조**하게 된다.
+   `masters.PENDING_COMMODITIES` 에 사유와 함께 있고 대시보드 `📐 대조 범위`에도 표시된다.
+
+   | 작목 | 확인할 것 |
+   |---|---|
+   | 감귤 | 일본 `UNSHU orange, pulp` / `Other citrus fruits` 중 어느 것인지 · EU product_id 미확인 |
+   | 고추 | FFCR 에 `Chili pepper, dried` 만 있음 — 신선 고추 대응 항목 |
+   | 대추·들깻잎·유자·인삼 | FFCR 개별 항목 없음 — `Other ~` 그룹 적용 여부 |
+
+2. **미연결 국가 수집기 추가** — 지침 행수 기준 대만(3,998) · 인도네시아(3,171) · 중국(1,303) 순.
+3. **EU 변경 시점** — EU Datalake API 가 MRL 레코드에 날짜를 주지 않아 `변경 감지`는 수집 이후부터 쌓인다.
 
 자세한 근거: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/FIELD_MAPPING.md](docs/FIELD_MAPPING.md),
 [docs/MONITORING.md](docs/MONITORING.md), [docs/STEP4_VALIDATION.md](docs/STEP4_VALIDATION.md).
