@@ -185,7 +185,7 @@ def render_html(g: dict) -> str:
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>{REPORT_TITLE} {g['date']}</title>
 <style>
- body{{font-family:-apple-system,'Malgun Gothic',sans-serif;margin:0;background:#f4f6f8;color:#1a1a1a}}
+ body{{font-family:-apple-system,'Noto Sans KR','Malgun Gothic',sans-serif;margin:0;background:#f4f6f8;color:#1a1a1a}}
  .wrap{{max-width:1100px;margin:0 auto;padding:16px}}
  h1{{font-size:20px}} h2{{font-size:16px;margin-top:28px;border-left:4px solid #345;padding-left:8px}}
  .cards{{display:flex;gap:16px;flex-wrap:wrap}}

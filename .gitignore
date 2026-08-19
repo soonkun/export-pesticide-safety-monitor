@@ -16,6 +16,9 @@ out/
 *.sqlite
 *.db
 
+# 스크립트 산출물
+cloudflared
+
 # OS/에디터
 .DS_Store
 Thumbs.db

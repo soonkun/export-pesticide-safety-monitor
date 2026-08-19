@@ -24,29 +24,75 @@
 자세한 근거: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/FIELD_MAPPING.md](docs/FIELD_MAPPING.md),
 [docs/MONITORING.md](docs/MONITORING.md), [docs/STEP4_VALIDATION.md](docs/STEP4_VALIDATION.md).
 
-## 빠른 시작
+## 빠른 시작 (Linux)
 
 ```bash
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-copy .env.example .env      # 키 채우기 (RDA_SERVICE_KEY, WTO_API_KEY, SMTP_*, KAKAO_*)
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env        # 키 채우기 (RDA_SERVICE_KEY, WTO_API_KEY, SMTP_*, KAKAO_*, OPS_PASS)
 
-.venv\Scripts\python -m src.pipeline            # 수집→비교→보고서→알림
-.venv\Scripts\python -m src.pipeline --no-notify # 알림 없이
-.venv\Scripts\python -m src.serve               # http://127.0.0.1:8000 대시보드/API
+.venv/bin/python -m src.pipeline             # 수집→비교→보고서→알림
+.venv/bin/python -m src.pipeline --no-notify # 알림 없이
+.venv/bin/python -m src.pipeline --only EU   # 소스 1개만 점검(국내망 진단)
+.venv/bin/python -m src.serve                # http://127.0.0.1:8000
 ```
 
 생성물: `out/dashboard.html`(대시보드), `out/report_YYYY-MM-DD.html`, `data/pesticide.sqlite`(DB).
 
-## 매일 자동 실행 (09:00)
+## 설치 (매일 09:00 자동실행 + 관제서버 + 공개터널)
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\schedule_windows.ps1
+```bash
+sudo scripts/install-systemd.sh
+```
+
+등록되는 유닛 3개:
+
+| unit | 역할 |
+|---|---|
+| `pesticide-monitor.timer` / `.service` | 매일 09:00 파이프라인 (`Persistent=true` — 꺼져 있던 날도 부팅 후 보충 실행) |
+| `pesticide-api.service` | 관제/대시보드 서버 (127.0.0.1:8000) |
+| `pesticide-tunnel.service` | Cloudflare Tunnel — 위 서버를 공개 URL로 노출 |
+
+```bash
+sudo systemctl start pesticide-monitor.service      # 즉시 1회 실행
+systemctl list-timers pesticide-monitor.timer       # 다음 실행 시각
+journalctl -u pesticide-monitor -n 100              # 실행 로그
+```
+
+## 관제·테스트 콘솔
+
+`GET /ops` — 브라우저에서 수동 실행 / 소스별 점검 / 실행로그 실시간 확인.
+
+- **전체 실행** : 수집→비교→보고서 (알림 발송 여부 선택)
+- **소스별 점검** : RDA·EU·Codex·Japan·WTO 개별 수집 테스트 → 상태/최신성/records/응답시간 즉시 확인
+- 실행은 서브프로세스로 돌고 결과는 `collection_runs`·`source_health`에 그대로 기록된다(수동 실행도 감사 대상).
+
+**인증**: 전 경로 HTTP Basic (`.env`의 `OPS_USER`/`OPS_PASS`).
+`OPS_PASS`가 비어 있으면 서버가 기동하지 않는다 — 공개 URL에 인증 없이 뜨는 사고를 막기 위함.
+
+## Cloudflare 배포
+
+관제 서버는 **국내망에서 RDA odcloud를 호출해야 하므로** Cloudflare 위(Workers/Pages)에서 돌릴 수 없다.
+서버는 국내망 리눅스 장비에 두고, Cloudflare Tunnel로 공개 URL만 붙인다(인바운드 포트 개방 불필요).
+
+```bash
+# 1) cloudflared 설치
+curl -sL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+sudo install -m755 /tmp/cloudflared /usr/local/bin/cloudflared
+
+# 2) 고정 도메인 (Cloudflare 계정 필요)
+#    대시보드 > Zero Trust > Networks > Tunnels 에서 터널 생성 후 토큰을 .env 에:
+#    CLOUDFLARE_TUNNEL_TOKEN=eyJ...
+#    → install-systemd.sh 가 이 토큰으로 pesticide-tunnel.service 를 구성한다.
+
+# 3) 토큰이 없으면 임시 URL(*.trycloudflare.com)로 뜬다. 재시작마다 주소가 바뀌므로 테스트용.
+journalctl -u pesticide-tunnel -n 30 | grep trycloudflare
 ```
 
 ## API (§33)
 
 `GET /status · /sources · /sources/{name}/health · /changes · /comparisons · /alerts · /history`
+`GET /ops · GET /ops/job · POST /ops/run · POST /ops/test/{source}`
 
 ## 아키텍처
 

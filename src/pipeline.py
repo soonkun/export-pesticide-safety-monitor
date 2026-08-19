@@ -1,17 +1,12 @@
 """전체 파이프라인 오케스트레이션.
 
 공식 수집 → 표준화 → 변경탐지/비교 → 시스템 상태검증 → 보고서 → 알림.
-매일 실행 진입점: python -m src.pipeline
+매일 실행 진입점 : python -m src.pipeline
+단일 소스 점검   : python -m src.pipeline --only EU
 """
 from __future__ import annotations
 
 import sys
-
-try:  # 콘솔이 cp949여도 한글/기호 출력이 깨지지 않도록
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-except Exception:
-    pass
 
 from . import db, report
 from .collectors import ALL_COLLECTORS
@@ -57,5 +52,23 @@ def run_daily(notify: bool = True) -> dict:
     return rep
 
 
+def run_one(name: str) -> dict:
+    """소스 1개만 수집(관제 페이지의 '점검' 버튼 / 국내망 진단용)."""
+    cls = next((c for c in ALL_COLLECTORS if c.name == name), None)
+    if cls is None:
+        raise SystemExit(f"알 수 없는 source: {name} (가능: {[c.name for c in ALL_COLLECTORS]})")
+    conn = db.connect()
+    db.init_db(conn)
+    print(f"[점검] {name} 수집 …")
+    summary = cls().run(conn)
+    conn.close()
+    print("  " + " ".join(f"{k}={v}" for k, v in summary.items() if v not in (None, "")))
+    return summary
+
+
 if __name__ == "__main__":
-    run_daily(notify="--no-notify" not in sys.argv)
+    argv = sys.argv[1:]
+    if "--only" in argv:
+        run_one(argv[argv.index("--only") + 1])
+    else:
+        run_daily(notify="--no-notify" not in argv)
