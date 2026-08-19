@@ -1,5 +1,6 @@
 """핵심 로직 자체점검: python test_monitor.py  (프레임워크 없음, 네트워크 없음)"""
 from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
+from src.collectors.taiwan import applies_to, build_classes
 from src.collectors.usa import build_group_index, parse_tolerances, resolve
 from src.compare import commodity_mapped, guideline_verdict
 from src.models import MrlKind, RegStatus, Severity
@@ -116,6 +117,48 @@ def test_usa_resolution():
     # 개별 품목 기준이 있으면 그룹보다 우선
     direct = rows + [("Apple", "0.5")]
     assert resolve(direct, "Apple", g) == ("Apple", "0.5")
+
+    # 같은 작물의 표기가 그룹 세대별로 다르면 여러 표기를 준다
+    g2 = dict(g, **{"11": {"apple", "pear, oriental"}})
+    assert resolve([("Fruit, pome, group 11", "0.2")],
+                   ["Pear, Asian", "Pear, oriental"], g2) == ("Fruit, pome, group 11", "0.2")
+
+
+TW_CLASSES = [
+    {"類別": "包葉菜類",
+     "農作物類農產品": "十字花科包葉菜【甘藍(含球莖甘藍、抱子甘藍)、花椰菜、結球白菜、青花菜】、結球萵苣、朝鮮薊等。"},
+    {"類別": "小漿果類", "農作物類農產品": "葡萄、草莓、蔓越莓、藍莓、覆盆子等。"},
+    {"類別": "梨果類", "農作物類農產品": "蘋果、梨、桃(含油桃)、柿子等。"},
+]
+
+
+def test_taiwan_classes():
+    c = build_classes(TW_CLASSES)
+    assert "甘藍" in c["包葉菜類"] and "結球白菜" in c["包葉菜類"]
+    # 【】로 묶인 소분류도 따로 색인된다 — 제외구가 소분류명으로 오기 때문
+    assert c["十字花科包葉菜"] == {"甘藍", "花椰菜", "結球白菜", "青花菜"}
+    assert "柿子" in c["梨果類"]        # 괄호 안 '、' 때문에 목록이 깨지지 않는다
+
+
+def test_taiwan_exclusions():
+    c = build_classes(TW_CLASSES)
+    # 배추·양배추는 십자화과 → '十字花科包葉菜類除外' 행을 쓰면 안 된다
+    row = "其他包葉菜類(十字花科包葉菜類、結球萵苣除外)"
+    assert not applies_to(row, "甘藍", c)
+    assert not applies_to(row, "結球白菜", c)
+    assert applies_to(row, "朝鮮薊", c)          # 십자화과가 아니므로 적용된다
+
+    # 작물명으로 제외한 경우
+    berry = "其他小漿果類(藍莓、覆盆子除外)"
+    assert applies_to(berry, "草莓", c) and applies_to(berry, "葡萄", c)
+    assert not applies_to(berry, "藍莓", c)
+
+    assert applies_to("梨果類", "蘋果", c)        # 류 전체 행
+    assert not applies_to("梨果類", "草莓", c)
+    # 정체를 모르는 제외 토큰이면 보수적으로 적용하지 않는다
+    assert not applies_to("其他小漿果類(듣도보도못한것除外)", "草莓", c)
+    assert applies_to("其他梨果類(柿子除外)", "蘋果", c)   # 별칭(柿↔柿子)
+    assert not applies_to("其他梨果類(柿子除外)", "柿", c)
 
 
 def test_clip():

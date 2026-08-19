@@ -59,6 +59,7 @@ def _norm_group_item(raw: str) -> str:
     m = _ITALIC.search(raw)
     s = raw[: m.start()] if m else raw
     s = re.sub(r"\([^)]*\)", " ", _txt(s).lower())
+    s = s.replace("(", " ").replace(")", " ")   # 'Apple (<I>학명</I>)' 은 여는 괄호만 남는다
     return re.sub(r"\s+", " ", s).strip(" .,;:")
 
 
@@ -123,12 +124,16 @@ def parse_tolerances(section_xml: str) -> list[tuple[str, str]]:
     return out
 
 
-def resolve(rows: list[tuple[str, str]], crop: str,
+def resolve(rows: list[tuple[str, str]], crop: str | list[str],
             groups: dict[str, set[str]]) -> tuple[str, str] | None:
-    """대상 작물의 허용량 1건을 규정에서 해석. 애매하면 None."""
-    target = _norm_commodity(crop)
+    """대상 작물의 허용량 1건을 규정에서 해석. 애매하면 None.
 
-    direct = [(c, v) for c, v in rows if _norm_commodity(c) == target]
+    crop 에 표기를 여러 개 줄 수 있다 — 같은 작물이 작물그룹 세대에 따라 다르게 불린다.
+    예: 아시아배는 group 11 에서 'Pear, oriental', group 11-10 에서 'Pear, Asian'.
+    """
+    targets = [_norm_commodity(c) for c in ([crop] if isinstance(crop, str) else crop)]
+
+    direct = [(c, v) for c, v in rows if _norm_commodity(c) in targets]
     if direct:
         return direct[0]
 
@@ -138,11 +143,13 @@ def resolve(rows: list[tuple[str, str]], crop: str,
         refs = _GROUP_REF.findall(commodity)
         if not refs:
             continue
-        if not any(target in groups.get(r.upper(), set()) for r in refs):
+        members = set().union(*(groups.get(r.upper(), set()) for r in refs)) if refs else set()
+        matched = [t for t in targets if t in members]
+        if not matched:
             continue
         # "..., except fuzzy kiwifruit" 처럼 제외된 작물이면 이 행은 쓰지 않는다
         excepts = re.findall(r"except ([^,;]+)", low)
-        if any(target in e for e in excepts):
+        if any(t in e for t in matched for e in excepts):
             continue
         hits.append((commodity, value))
 
@@ -200,7 +207,7 @@ class UsaCollector(BaseCollector):
                 commodity_txt, ppm = hit
                 db.record_foreign_mrl(
                     conn, source=self.name, pesticide_en=en, commodity_ko=commodity_ko,
-                    commodity_src=crop, mrl=parse_scalar(ppm), source_url=url,
+                    commodity_src=commodity_txt, mrl=parse_scalar(ppm), source_url=url,
                     basis=f"40 CFR §{sec_no} — {commodity_txt}")
                 stored += 1
 

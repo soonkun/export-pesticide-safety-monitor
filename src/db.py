@@ -188,6 +188,18 @@ def upsert_health(conn, source: str, **kw) -> None:
     )
 
 
+def prune_foreign_mrls(conn, source: str, before: str) -> int:
+    """이번 수집에서 다시 확인되지 않은 그 소스의 기준값을 지운다.
+
+    upsert 만 하면 소스가 기준을 삭제하거나 해석 규칙이 바뀌어도 옛 값이 남아
+    "지침=현행 일치"로 계속 보고된다(실측: 대만 파서 수정 후 잘못된 값 2건이 살아남음).
+    수집이 성공했을 때만 호출한다 — 실패 시 지우면 멀쩡한 값을 잃는다.
+    """
+    cur = conn.execute("DELETE FROM foreign_mrls WHERE source=? AND retrieved_at < ?",
+                       (source, before))
+    return cur.rowcount
+
+
 def record_registration(conn, *, source, pesticide_en, status, approval_date=None,
                         expiry_date=None) -> None:
     """등록상태 upsert + 상태 변경 시 history/change_events(REGISTRATION_CHANGED) 기록 (§14)."""

@@ -47,6 +47,12 @@ USA_CFR_DATE_URL = "https://www.ecfr.gov/api/versioner/v1/titles.json"
 USA_CFR_PART_URL = "https://www.ecfr.gov/api/versioner/v1/full/{date}/title-40.xml?part=180"
 USA_SECTION_URL = "https://www.ecfr.gov/current/title-40/section-{section}"
 
+# 대만 현행 MRL = TFDA 農藥殘留容許量標準 오픈데이터(무키).
+# 엔드포인트는 TFDA OpenAPI 명세에서 확인(추측 아님). Accept: application/json 필수.
+TAIWAN_MRL_URL = "https://data.fda.gov.tw/data/opendata/export/13/json"
+TAIWAN_CLASS_URL = "https://data.fda.gov.tw/data/opendata/export/16/json"   # 農作物類農產品之分類表
+TAIWAN_SOURCE_PAGE = "https://data.gov.tw/dataset/8944"
+
 # ---- 소스 메타 (System Health / Freshness 기준, §18·§21) ----
 # expected_update_interval 단위: 일(day). 초기값이며 실주기 확인 후 조정(문서 MONITORING §5).
 SOURCES = {
@@ -55,6 +61,7 @@ SOURCES = {
     "Japan": {"country": "JP",  "kind": "regulation", "interval_days": 45,  "authoritative": True},
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
     "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
+    "Taiwan": {"country": "TW", "kind": "regulation", "interval_days": 30,  "authoritative": True},
     "WTO":   {"country": "INT", "kind": "earlywarn",  "interval_days": 1,   "authoritative": False},
 }
 

@@ -85,6 +85,11 @@ class BaseCollector:
         rt = round(time.time() - t0, 2)
 
         ok = status in (Health.HEALTHY, Health.WARNING)
+        if ok:
+            # 이번 수집에 없던 값은 소스에서 사라진 것 → 남겨두면 옛 값으로 '일치' 오보가 난다
+            pruned = db.prune_foreign_mrls(conn, self.name, started)
+            if pruned:
+                result.warnings.append(f"소스에서 사라진 기준 {pruned}건 제거")
         prev = conn.execute("SELECT last_success_at,consecutive_failures FROM source_health WHERE source=?",
                             (self.name,)).fetchone()
         consec = 0 if ok else ((prev["consecutive_failures"] if prev else 0) + 1)

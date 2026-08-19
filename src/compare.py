@@ -21,7 +21,7 @@ from .normalize import align_pipe, split_rda_product
 
 # 지침 원문의 국가명 → 우리가 현행 기준을 수집하는 소스.
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
-COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA"}
+COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan"}
 IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
 
 
@@ -30,7 +30,8 @@ def commodity_mapped(source: str, commodity_ko: str) -> bool:
     cm = COMMODITIES.get(commodity_ko)
     if not cm:
         return False
-    key = {"Japan": "japan_name", "USA": "usa_name"}.get(source, "eu_product_id")
+    key = {"Japan": "japan_name", "USA": "usa_name",
+           "Taiwan": "taiwan_name"}.get(source, "eu_product_id")
     return bool(cm.get(key))
 
 
