@@ -335,6 +335,17 @@ def _watched_html(rows: list[dict]) -> str:
     return "".join(out)
 
 
+def _unnamed_html(rows: list[dict]) -> str:
+    """성분명이 첨부문서에만 있는 MRL 개정 통보 — 값 대조가 안 되는 나라에선 유일한 신호다."""
+    if not rows:
+        return "<p class=dim>없음</p>"
+    return "<ul>" + "".join(
+        f"<li>{member_label(x['member'])} <b>{dday(x['days'])}</b> "
+        f"<span class=dim>{_esc(x['when'])}</span><br>"
+        f"{_titled(x['title'], x['link'], 70)} <small class=dim>{_esc(x['symbol'])}</small></li>"
+        for x in rows) + "</ul>"
+
+
 def _coverage_html(cov: dict) -> str:
     """지침이 배포 중인 조합 중 실제로 대조한 비율. 못 한 것을 숨기지 않는다."""
     def _tbl(items, extra=lambda x: ""):
@@ -474,6 +485,12 @@ def render_html(g: dict) -> str:
 
 <h2>개정 감시 <small>(값 대조 불가 · 판 변경만 추적)</small></h2>
 <div class=list>{_watched_html(g['watched'])}</div>
+{_fold('📨 성분 미상 MRL 개정 통보 <small>(값 대조 불가 국가 · WTO SPS)</small>',
+       len(g['eping']['unnamed']), _unnamed_html(g['eping']['unnamed'])
+       + '<p class=hint>일본처럼 제목이 포괄적인 나라는 성분명이 첨부문서에만 있어 성분 단위로는'
+         ' 잡히지 않습니다(실측: MRL 통보 202건 중 성분명이 드러난 것은 5건). 값 대조가 되는'
+         ' 나라는 결국 숫자로 잡히지만, 값을 못 읽는 나라는 이 통보가 유일한 신호라 원문을'
+         ' 열어 직접 확인해야 합니다.</p>')}
 
 {_fold('📐 대조 범위 — 지침 ' + str(g['coverage']['total']) + '개 조합 중 ' + str(len(g['coverage']['covered'])) + '개 대조', g['coverage']['total'], _coverage_html(g['coverage']))}
 {_fold('📌 참고 · 국내 MRL이 현행 해외기준보다 높은 건', len([c for c in g['comps'] if c['item'] == 'EXPORT_MARGIN']), _margin_html(g['comps']))}

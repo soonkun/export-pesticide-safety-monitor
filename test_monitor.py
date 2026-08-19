@@ -226,6 +226,16 @@ def test_canada_csv():
     assert effective_date("") is None
 
 
+def test_eping_member_country_map():
+    """지침 국가명 ↔ ePing 회원국 표기가 실제로 이어져야 통보문을 대상국에 붙일 수 있다."""
+    from src.compare import COUNTRY_SOURCE, EPING_MEMBER_COUNTRY
+    # 값 대조/감시 중인 국가는 모두 매핑이 있어야 한다
+    for country in COUNTRY_SOURCE:
+        assert country in EPING_MEMBER_COUNTRY, country
+    assert EPING_MEMBER_COUNTRY["중국"] == "China"
+    assert EPING_MEMBER_COUNTRY["대만"] == "Chinese Taipei"   # ePing 은 'Taiwan' 을 쓰지 않는다
+
+
 def test_standard_watch():
     """값을 못 읽는 기준이라도 판이 바뀌면 잡아내야 한다 — 그게 감시의 전부다."""
     import sqlite3

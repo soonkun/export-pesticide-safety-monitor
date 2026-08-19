@@ -186,6 +186,15 @@ def registration(conn, source, pesticide_en):
 TRACKED_MEMBERS = {"European Union": "EU", "Japan": "Japan",
                    "United States of America": "USA"}
 
+# 지침 국가명(한국어) → ePing 회원국 표기. 통보문을 지침 대상국과 잇는 데 쓴다.
+EPING_MEMBER_COUNTRY = {
+    "일본": "Japan", "EU": "European Union", "미국": "United States of America",
+    "대만": "Chinese Taipei", "중국": "China", "홍콩": "Hong Kong, China",
+    "캐나다": "Canada", "호주": "Australia", "뉴질랜드": "New Zealand",
+    "싱가폴": "Singapore", "태국": "Thailand", "러시아": "Russian Federation",
+    "인도네시아": "Indonesia",
+}
+
 
 def _days_until(d: str | None) -> int | None:
     if not d:
@@ -208,6 +217,51 @@ def _upcoming_severity(days: int | None) -> str:
     if days is None or days > 90:
         return "LOW"
     return "HIGH" if days <= 30 else "MEDIUM"
+
+
+# ePing 통보문의 keywords 에 붙는 MRL 표지. 일본처럼 제목이 포괄적인 나라
+# ("Revision of the Specifications and Standards for Foods...")는 성분명이 첨부문서에만 있어
+# 제목·품목 매칭으로는 잡히지 않는다. 실측: MRL 통보 202건 중 성분명이 드러난 것은 5건뿐.
+MRL_KEYWORD = "maximum residue"
+
+
+def guideline_countries(conn) -> set[str]:
+    """지침이 실제로 배포 중인 국가(한국어 표기)."""
+    return {r[0] for r in conn.execute("SELECT DISTINCT target_country FROM rda_guidelines")}
+
+
+def unnamed_mrl_notices(conn) -> list[dict]:
+    """성분명이 드러나지 않은 MRL 개정 통보 중, **다른 방법으로는 잡을 수 없는 것**.
+
+    값 대조가 되는 나라(일본·EU·미국·대만·홍콩·캐나다)는 통보를 놓쳐도 다음 수집에서
+    숫자가 바뀐 것으로 잡힌다. 값 대조가 안 되는 나라는 이 통보가 유일한 신호다.
+    """
+    ens = [pm["english"].lower() for pm in PESTICIDES.values()]
+    member_country = {v: k for k, v in EPING_MEMBER_COUNTRY.items()}
+    compared = {c for c, src in COUNTRY_SOURCE.items()
+                if not SOURCES.get(src, {}).get("watch")}
+    covered_countries = guideline_countries(conn)
+
+    out = []
+    for r in conn.execute(
+            "SELECT member,document_symbol,title,products,keywords,entry_into_force,"
+            "comment_deadline,link FROM sps_notifications "
+            "WHERE lower(COALESCE(keywords,'')) LIKE ?", (f"%{MRL_KEYWORD}%",)):
+        country = member_country.get(r["member"])
+        if country is None or country not in covered_countries:
+            continue                      # 지침 대상국이 아니면 조치할 것이 없다
+        if country in compared:
+            continue                      # 값 대조로 결국 잡히므로 여기서 중복 경보하지 않는다
+        text = f"{r['title'] or ''} {r['products'] or ''}".lower()
+        if any(en in text for en in ens):
+            continue                      # 성분이 드러난 건은 urgent/prepare 에서 이미 다룬다
+        days = _days_until(r["entry_into_force"]) or _days_until(r["comment_deadline"])
+        out.append({"member": r["member"], "country": country,
+                    "symbol": r["document_symbol"], "title": r["title"],
+                    "link": r["link"], "days": days,
+                    "when": (r["entry_into_force"] or r["comment_deadline"] or "")[:10]})
+    out.sort(key=lambda x: (x["days"] is None, x["days"] if x["days"] is not None else 0))
+    return out
 
 
 def classify_eping(conn) -> dict:
@@ -265,7 +319,8 @@ def classify_eping(conn) -> dict:
     prepare.sort(key=lambda x: x["days"])
     urgent.sort(key=lambda x: x["days"])
 
-    return {"urgent": urgent, "prepare": prepare, "hidden": hidden}
+    return {"urgent": urgent, "prepare": prepare, "hidden": hidden,
+            "unnamed": unnamed_mrl_notices(conn)}
 
 
 def eping_evidence(conn, source: str, pesticide_en: str) -> str | None:
