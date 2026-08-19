@@ -39,12 +39,18 @@ def send_email(subject: str, html_body: str) -> tuple[bool, str]:
 
 
 def _kakao_access_token() -> str | None:
-    r = requests.post("https://kauth.kakao.com/oauth/token", data={
+    data = {
         "grant_type": "refresh_token",
         "client_id": config.KAKAO_REST_KEY,
         "refresh_token": config.KAKAO_REFRESH_TOKEN,
-    }, timeout=30, verify=HTTP_VERIFY)
-    r.raise_for_status()
+    }
+    # 앱 설정에서 'Client Secret'을 사용함으로 켜두면 이 값이 없을 때 KOE010(invalid_client)이 난다.
+    if config.KAKAO_CLIENT_SECRET:
+        data["client_secret"] = config.KAKAO_CLIENT_SECRET
+    r = requests.post("https://kauth.kakao.com/oauth/token", data=data,
+                      timeout=30, verify=HTTP_VERIFY)
+    if r.status_code != 200:
+        raise RuntimeError(f"토큰 갱신 실패 HTTP {r.status_code}: {r.text}")
     return r.json().get("access_token")
 
 
@@ -65,7 +71,8 @@ def send_kakao(text: str) -> tuple[bool, str]:
             headers={"Authorization": f"Bearer {token}"},
             data={"template_object": _json.dumps(template, ensure_ascii=False)},
             timeout=30, verify=HTTP_VERIFY)
-        r.raise_for_status()
+        if r.status_code != 200:
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
         return True, "카카오 '나에게 보내기' 발송 완료"
     except Exception as e:
         return False, f"카카오 실패: {e}"

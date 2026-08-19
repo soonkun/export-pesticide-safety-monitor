@@ -196,6 +196,20 @@ def ops_test(name: str):
     return {"started": True}
 
 
+@app.post("/ops/test-notify")
+def ops_test_notify():
+    """설정된 채널로 테스트 메시지 1건 발송 — '카톡이 실제로 오는가'를 즉시 확인."""
+    from .notify import send_email, send_kakao
+    ts = db.now_iso()
+    out = []
+    ok, msg = send_kakao(f"[테스트] 수출농산물 농약기준 모니터링\n발송 시각 {ts}\n이 메시지가 보이면 카카오 채널 정상입니다.")
+    out.append({"channel": "kakao", "ok": ok, "message": msg})
+    ok, msg = send_email("[테스트] 수출농산물 농약기준 모니터링",
+                         f"<p>테스트 발송 {ts}. 이 메일이 보이면 이메일 채널 정상입니다.</p>")
+    out.append({"channel": "email", "ok": ok, "message": msg})
+    return {"results": out}
+
+
 @app.get("/ops/job")
 def ops_job():
     return {**_job, "log": list(_log)}
@@ -226,6 +240,7 @@ def ops_page():
 <div class=bar>
  <button class=primary id=run>전체 실행 (수집→비교→보고서)</button>
  <button id=runNotify>전체 실행 + 알림발송</button>
+ <button id=testNotify>📨 테스트 발송(카톡/메일)</button>
  {buttons}
  <a href="/" target=_blank><button>📋 대시보드</button></a>
 </div>
@@ -244,6 +259,10 @@ async function post(u) {{
 }}
 document.getElementById('run').onclick = () => post('/ops/run');
 document.getElementById('runNotify').onclick = () => post('/ops/run?notify=1');
+document.getElementById('testNotify').onclick = async () => {{
+  const j = await (await fetch('/ops/test-notify', {{method:'POST'}})).json();
+  alert(j.results.map(r => `${{r.ok ? '✅' : '❌'}} ${{r.channel}} — ${{r.message}}`).join('\n'));
+}};
 document.querySelectorAll('button.src').forEach(b =>
   b.onclick = () => post('/ops/test/' + b.dataset.src));
 

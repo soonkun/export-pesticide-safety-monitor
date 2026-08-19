@@ -65,13 +65,13 @@ def _pick(rows, col, pesticide_ko) -> Mrl | None:
 
 
 def live_mrl(conn, source, pesticide_en, commodity_ko) -> Mrl | None:
-    r = conn.execute("SELECT mrl_kind,mrl_value,mrl_display,is_default FROM foreign_mrls "
+    r = conn.execute("SELECT mrl_kind,mrl_value,mrl_display,is_default,note FROM foreign_mrls "
                      "WHERE source=? AND pesticide_en=? AND commodity_ko=?",
                      (source, pesticide_en, commodity_ko)).fetchone()
     if not r:
         return None
     return Mrl(MrlKind(r["mrl_kind"]), value=r["mrl_value"], raw=r["mrl_display"],
-               is_default=bool(r["is_default"]))
+               note=r["note"] or "", is_default=bool(r["is_default"]))
 
 
 # ---- 1) 지침 정합성 판정 ----
@@ -115,7 +115,7 @@ def _months_until(d: str | None) -> int | None:
         dt = datetime.strptime(d[:10], "%Y-%m-%d").date()
     except ValueError:
         return None
-    return max(0, (dt.year - date.today().year) * 12 + (dt.month - date.today().month))
+    return (dt.year - date.today().year) * 12 + (dt.month - date.today().month)
 
 
 def upcoming_from_eping(conn) -> list[dict]:
@@ -133,7 +133,9 @@ def upcoming_from_eping(conn) -> list[dict]:
         months = _months_until(r["entry_into_force"])
         ko, _ = ens[hit_en]
         when = (r["entry_into_force"] or r["comment_deadline"] or "")[:10]
-        if months is not None:
+        if months is not None and months <= 0:
+            tail = f" · 이미 시행({when}) — 현행 반영 여부 확인"
+        elif months is not None:
             tail = f" · 약 {months}개월 후({when}) 시행 예정"
         elif when:
             tail = f" · 의견마감/시행 {when}"
@@ -157,7 +159,8 @@ def run_comparisons(conn) -> dict:
     health = {r["source"]: r for r in conn.execute("SELECT * FROM source_health").fetchall()}
     rows: list[dict] = []
 
-    def _emit(source, commodity_ko, pest_ko, pest_en, item, status, sev, korea, foreign, detail):
+    def _emit(source, commodity_ko, pest_ko, pest_en, item, status, sev, korea, foreign, detail,
+                  published=None):
         h = health.get(source)
         hstatus = h["status"] if h else Health.UNKNOWN.value
         hfresh = h["freshness"] if h else Freshness.UNKNOWN.value
@@ -165,16 +168,18 @@ def run_comparisons(conn) -> dict:
         r = dict(source=source, pesticide_ko=pest_ko, pesticide_en=pest_en, commodity_ko=commodity_ko,
                  item=item, status=status.value, severity=sev.value,
                  korea_mrl=(korea.display() if korea else None),
+                 published_mrl=(published.display() if published else None),
                  foreign_mrl=foreign, detail=detail, data_confidence=conf.value,
                  source_status=hstatus, source_freshness=hfresh,
                  last_success_at=(h["last_success_at"] if h else None),
                  data_date=(h["last_data_date"] if h else None))
         conn.execute(
             "INSERT INTO comparison_results(run_at,source,pesticide_ko,pesticide_en,commodity_ko,"
-            "item,status,severity,korea_mrl,foreign_mrl,detail,data_confidence,source_status,"
-            "source_freshness,last_success_at,data_date) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "item,status,severity,korea_mrl,published_mrl,foreign_mrl,detail,data_confidence,"
+            "source_status,source_freshness,last_success_at,data_date)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (run_at, r["source"], r["pesticide_ko"], r["pesticide_en"], r["commodity_ko"], r["item"],
-             r["status"], r["severity"], r["korea_mrl"], r["foreign_mrl"], r["detail"],
+             r["status"], r["severity"], r["korea_mrl"], r["published_mrl"], r["foreign_mrl"], r["detail"],
              r["data_confidence"], r["source_status"], r["source_freshness"],
              r["last_success_at"], r["data_date"]))
         rows.append(r)
@@ -206,8 +211,11 @@ def run_comparisons(conn) -> dict:
                     foreign = None
                 else:
                     status, sev, detail = guideline_verdict(published, live)
+                    if live.note:
+                        detail += f" · {live.note}"
                     foreign = live.display()
-                _emit(source, commodity_ko, pest_ko, en, "GUIDELINE", status, sev, korea, foreign, detail)
+                _emit(source, commodity_ko, pest_ko, en, "GUIDELINE", status, sev, korea, foreign, detail,
+                      published=published)
 
                 if status == RegStatus.FOREIGN_CHANGED:
                     db.add_alert(conn, category="REGULATION", severity=sev.value,

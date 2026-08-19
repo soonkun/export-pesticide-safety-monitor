@@ -10,6 +10,7 @@ from datetime import date
 
 from . import db
 from .config import OUT_DIR, REPORT_TITLE, SOURCES
+from .masters import COMMODITIES, PESTICIDES
 
 # 규정 상태 → 3분류 (§35)
 REG_OK = {"MATCH", "RDA_STRICTER", "NO_FOREIGN_STANDARD"}
@@ -49,6 +50,9 @@ def gather(conn) -> dict:
         "SELECT * FROM change_events ORDER BY id DESC LIMIT 50").fetchall()]
     sps = [dict(r) for r in conn.execute(
         "SELECT * FROM sps_notifications ORDER BY distribution_date DESC LIMIT 30").fetchall()]
+    # 지침에 없는 (성분×작물×국가)도 현행 기준은 보여준다 — 비교표 빈칸 대신 회색 참고값
+    live = {(r["source"], r["pesticide_en"], r["commodity_ko"]): r["mrl_display"]
+            for r in conn.execute("SELECT source,pesticide_en,commodity_ko,mrl_display FROM foreign_mrls")}
 
     reg_counts = {"ok": 0, "warn": 0, "fail": 0}
     for c in comps:
@@ -77,6 +81,7 @@ def gather(conn) -> dict:
         "date": date.today().isoformat(),
         "health": health, "comps": comps, "alerts": alerts,
         "changes": changes, "sps": sps,
+        "live": live,
         "reg_counts": reg_counts, "sys_counts": sys_counts,
         "actions": actions,
         "reg_alerts": [a for a in alerts if a["category"] in ("REGULATION", "REGISTRATION")],
@@ -102,134 +107,166 @@ def render_text(g: dict) -> str:
     return "\n".join(lines)[:190]
 
 
-def _rows_html(comps: list[dict]) -> str:
-    out = []
-    for c in comps:
-        b = _reg_bucket(c["status"])
-        conf = c["data_confidence"]
-        conf_warn = "" if conf == "HIGH" else " style='color:#b30'"
-        out.append(
-            f"<tr><td>{DOT[b]}</td><td><small>{html.escape(c.get('item',''))}</small></td>"
-            f"<td>{html.escape(c['source'])}</td>"
-            f"<td>{html.escape(c['commodity_ko'])}</td><td>{html.escape(c['pesticide_ko'])}"
-            f"<br><small>{html.escape(c['pesticide_en'])}</small></td>"
-            f"<td>{html.escape(c['korea_mrl'] or '-')}</td>"
-            f"<td>{html.escape(c['foreign_mrl'] or '-')}</td>"
-            f"<td><b>{html.escape(c['status'])}</b><br><small>{html.escape(c['detail'] or '')}</small></td>"
-            f"<td>{html.escape(c['severity'])}</td>"
-            f"<td{conf_warn}>{html.escape(conf)}<br><small>{html.escape(c['source_status'] or '')}/"
-            f"{html.escape(c['source_freshness'] or '')}</small></td>"
-            f"<td><small>정상수집 {html.escape((c['last_success_at'] or '없음')[:16])}</small></td></tr>")
-    return "\n".join(out)
+COL_SOURCES = [("EU", "EU"), ("Japan", "일본")]
 
 
-def _health_html(health: list[dict]) -> str:
+def _cell(c: dict | None, ref: str | None = None) -> str:
+    """비교결과 1건 → 표 셀. 값이 바뀐 것만 '지침→현행'으로 두 값을 보여준다.
+
+    지침이 그 나라를 대상으로 하지 않는 조합은 비교 대상이 아니므로,
+    현행 기준만 회색 참고값으로 보여준다(판정 없음).
+    """
+    if c is None:
+        return f"<td class='v nil'>{html.escape(ref)}</td>" if ref else "<td class=nil>·</td>"
+    b = _reg_bucket(c["status"])
+    cur = html.escape(c["foreign_mrl"] or "-")
+    detail = html.escape(c["detail"] or "")
+    if c["status"] == "FOREIGN_CHANGED" and c.get("published_mrl"):
+        cur = f"<s>{html.escape(c['published_mrl'])}</s> {cur}"
+    elif c["status"] != "MATCH":
+        cur = cur or "?"
+    warn = "" if c["data_confidence"] == "HIGH" else " ◦"
+    return f'<td class="v {b}" title="{detail}">{cur}{warn}</td>'
+
+
+def _matrix_html(comps: list[dict], live: dict) -> str:
+    """작물 × 성분 행, 국내/EU/일본 열.
+
+    지침에 실린 조합은 판정색으로, 지침 대상이 아닌 조합은 현행 기준만 회색 참고값으로.
+    양쪽 다 없는 조합은 행을 만들지 않는다.
+    """
+    judged = {(c["commodity_ko"], c["pesticide_ko"], c["source"]): c
+              for c in comps if c["item"] == "GUIDELINE"}
+    korea = {(c["commodity_ko"], c["pesticide_ko"]): c["korea_mrl"]
+             for c in comps if c["item"] == "GUIDELINE"}
+
+    body = []
+    for commodity in COMMODITIES:
+        first = True
+        for pest, pm in PESTICIDES.items():
+            en = pm["english"]
+            cells = [(judged.get((commodity, pest, s)), live.get((s, en, commodity)))
+                     for s, _lbl in COL_SOURCES]
+            if not any(c or ref for c, ref in cells):
+                continue
+            body.append(f"<tr><td class=grp>{html.escape(commodity) if first else ''}</td>"
+                        f"<td>{html.escape(pest)}<br><small>{html.escape(en)}</small></td>"
+                        f"<td class=v>{html.escape(korea.get((commodity, pest)) or '-')}</td>"
+                        + "".join(_cell(c, ref) for c, ref in cells) + "</tr>")
+            first = False
+    if not body:
+        return "<p><small>표시할 (작물×성분) 조합이 없습니다.</small></p>"
+    return ("<table class=mx><tr><th>작물</th><th>성분</th><th>국내지침</th>"
+            + "".join(f"<th>{lbl}</th>" for _s, lbl in COL_SOURCES) + "</tr>"
+            + "".join(body) + "</table>")
+
+
+def _todo_html(g: dict) -> str:
+    """조치가 필요한 건만 한 줄씩. 없으면 한 줄로 끝낸다."""
+    a = g["actions"]
+    lines = []
+    for c in a["no_export"]:
+        lines.append(f"<li class=fail>⛔ <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}"
+                     f"/{html.escape(c['pesticide_ko'])}</b> 수출용 사용 불가 — "
+                     f"<small>{html.escape(c['detail'] or '')}</small></li>")
+    for c in a["update_guideline"]:
+        lines.append(f"<li class=fail>🔴 <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}"
+                     f"/{html.escape(c['pesticide_ko'])}</b> 지침 갱신 — "
+                     f"<small>{html.escape(c['detail'] or '')}</small></li>")
+    for c in a["stale"]:
+        lines.append(f"<li class=warn>⚠ <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}"
+                     f"/{html.escape(c['pesticide_ko'])}</b> 최신성 확인 — "
+                     f"<small>{html.escape(c['detail'] or '')}</small></li>")
+    if not lines:
+        return "<p class=none>✅ 지금 조치할 항목 없음 (모든 소스 최신 확인됨)</p>"
+    return f"<ul class=todo>{''.join(lines)}</ul>"
+
+
+def _chips_html(health: list[dict]) -> str:
     seen = {h["source"]: h for h in health}
     out = []
-    for name, meta in SOURCES.items():
+    for name in SOURCES:
         h = seen.get(name)
-        status = (h["status"] if h else "UNKNOWN")
-        b = _sys_bucket(status or "UNKNOWN")
-        fresh = (h["freshness"] if h else "UNKNOWN")
-        last_ok = (h["last_success_at"] if h and h["last_success_at"] else "없음")
-        last_try = (h["latest_attempt_at"] if h and h["latest_attempt_at"] else "없음")
-        recs = (h["number_of_records"] if h else 0)
-        msg = (h["status_message"] if h and h["status_message"] else "")
-        out.append(
-            f"<tr><td>{DOT[b]}</td><td>{name}</td><td>{meta['country']}</td>"
-            f"<td><b>{html.escape(status or '')}</b></td><td>{html.escape(fresh or '')}</td>"
-            f"<td>{recs}</td><td><small>{html.escape(str(last_ok)[:16])}</small></td>"
-            f"<td><small>{html.escape(str(last_try)[:16])}</small></td>"
-            f"<td><small>{html.escape(msg)}</small></td></tr>")
-    return "\n".join(out)
+        st = (h["status"] if h else "UNKNOWN") or "UNKNOWN"
+        msg = (h["status_message"] if h else "") or ""
+        when = (h["last_success_at"] if h and h["last_success_at"] else "없음")[:16]
+        out.append(f'<span class="chip {_sys_bucket(st)}" title="{html.escape(st)} · 마지막 정상수집 '
+                   f'{html.escape(when)} {html.escape(msg[:120])}">{DOT[_sys_bucket(st)]} {name}</span>')
+    return "".join(out)
 
 
-def _actions_html(g: dict) -> str:
-    a = g["actions"]
-
-    def _li(items, fmt):
-        return "".join(fmt(c) for c in items) or "<li>해당 없음</li>"
-
-    upd = _li(a["update_guideline"], lambda c:
-              f"<li>🔴 <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}/"
-              f"{html.escape(c['pesticide_en'])}</b> — {html.escape(c['detail'] or '')}</li>")
-    noexp = _li(a["no_export"], lambda c:
-                f"<li>⛔ <b>{html.escape(c['commodity_ko'])}/{html.escape(c['pesticide_en'])}</b> — "
-                f"{html.escape(c['detail'] or '')}</li>")
-    up = _li(a["upcoming"], lambda x:
-             f"<li>🕒 {html.escape(x['title'])}<br><small>{html.escape((x['body'] or '')[:200])}</small></li>")
-    stale = _li(a["stale"], lambda c:
-                f"<li>⚠ <b>{html.escape(c['source'])} {html.escape(c['commodity_ko'])}/"
-                f"{html.escape(c['pesticide_en'])}</b> — {html.escape(c['detail'] or '')}</li>")
-    return f"""<h2>■ 담당자 조치사항 (의사결정)</h2>
-<div class=actions>
- <div class=act><h3>① 지침 갱신 필요 <small>(배포 해외기준 ≠ 현행)</small></h3><ul>{upd}</ul></div>
- <div class=act><h3>② 수출용 사용 불가 <small>(수입국 미승인/등록취소)</small></h3><ul>{noexp}</ul></div>
- <div class=act><h3>③ 변경 예고 <small>(eping, N개월 후 대비)</small></h3><ul>{up}</ul></div>
- <div class=act><h3>④ 최신성 확인 필요 <small>(수집 실패 → 신뢰 불가)</small></h3><ul>{stale}</ul></div>
-</div>"""
+def _fold(title: str, n: int, body: str) -> str:
+    return f"<details><summary>{title} <b>{n}</b></summary>{body}</details>"
 
 
 def render_html(g: dict) -> str:
-    rc, sc = g["reg_counts"], g["sys_counts"]
+    a = g["actions"]
+    todo_n = len(a["no_export"]) + len(a["update_guideline"]) + len(a["stale"])
+    upcoming = "".join(
+        f"<li>{html.escape(x['title'])}<br><small>{html.escape((x['body'] or '')[:180])}</small></li>"
+        for x in a["upcoming"]) or "<li>없음</li>"
     alerts_html = "".join(
-        f"<li><b>[{html.escape(a['severity'])}]</b> {html.escape(a['category'])} — "
-        f"{html.escape(a['title'])}<br><small>{html.escape((a['body'] or '')[:300])}</small></li>"
-        for a in g["alerts"][:30]) or "<li>신규 알림 없음</li>"
+        f"<li><b>[{html.escape(x['severity'])}]</b> {html.escape(x['title'])}"
+        f"<br><small>{html.escape((x['body'] or '')[:200])}</small></li>"
+        for x in g["alerts"][:30]) or "<li>없음</li>"
     sps_html = "".join(
-        f"<li><small>{html.escape((s['distribution_date'] or '')[:10])} · {html.escape(s['member'] or '')} · "
-        f"{html.escape(s['document_symbol'] or '')}</small><br>{html.escape((s['title'] or '')[:160])}</li>"
-        for s in g["sps"][:15]) or "<li>수집된 SPS 통보문 없음</li>"
+        f"<li><small>{html.escape((s['distribution_date'] or '')[:10])} · {html.escape(s['member'] or '')}</small> "
+        f"{html.escape((s['title'] or '')[:120])}</li>"
+        for s in g["sps"][:15]) or "<li>없음</li>"
 
     return f"""<!doctype html><html lang=ko><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>{REPORT_TITLE} {g['date']}</title>
 <style>
- body{{font-family:-apple-system,'Noto Sans KR','Malgun Gothic',sans-serif;margin:0;background:#f4f6f8;color:#1a1a1a}}
- .wrap{{max-width:1100px;margin:0 auto;padding:16px}}
- h1{{font-size:20px}} h2{{font-size:16px;margin-top:28px;border-left:4px solid #345;padding-left:8px}}
- .cards{{display:flex;gap:16px;flex-wrap:wrap}}
- .card{{flex:1;min-width:280px;background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.1)}}
- .big{{font-size:15px;line-height:2}} .ok{{color:#0a0}} .warn{{color:#b80}} .fail{{color:#c00}}
- table{{width:100%;border-collapse:collapse;background:#fff;font-size:13px;overflow:hidden;border-radius:8px}}
- th,td{{border:1px solid #e3e6ea;padding:6px 8px;text-align:left;vertical-align:top}}
- th{{background:#f0f3f6}} small{{color:#666}}
- .note{{background:#fff8e1;border:1px solid #ffe082;padding:10px;border-radius:8px;font-size:13px}}
- .actions{{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
- @media(max-width:700px){{.actions{{grid-template-columns:1fr}}}}
- .act{{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:10px}}
- .act h3{{margin:0 0 6px;font-size:14px}} .act ul{{margin:0;padding-left:18px}} .act li{{margin:4px 0;font-size:13px}}
+ :root{{--line:#e3e6ea;--ok:#0a7d33;--warn:#a86500;--fail:#c0281f}}
+ *{{box-sizing:border-box}}
+ body{{font-family:-apple-system,'Noto Sans KR','Malgun Gothic',sans-serif;margin:0;
+      background:#f6f7f9;color:#1a1a1a;font-size:14px;line-height:1.45}}
+ .wrap{{max-width:920px;margin:0 auto;padding:14px}}
+ h1{{font-size:17px;margin:0 0 8px}} h1 small{{font-weight:400;color:#666}}
+ h2{{font-size:14px;margin:20px 0 6px;color:#33414f}}
+ .strip{{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}}
+ .chip{{background:#fff;border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:12.5px}}
+ .chip.ok{{border-color:#bfe3c9}} .chip.warn{{border-color:#f0d9a8}} .chip.fail{{border-color:#f3bdb8;background:#fff5f4}}
+ .count{{font-weight:700;border-radius:6px;padding:2px 9px;font-size:12.5px;border:1px solid var(--line);background:#fff}}
+ .count.hit{{background:#fdecea;border-color:#f3bdb8;color:var(--fail)}}
+ ul.todo{{list-style:none;margin:0;padding:0;background:#fff;border:1px solid var(--line);border-radius:8px}}
+ ul.todo li{{padding:7px 10px;border-bottom:1px solid var(--line)}}
+ ul.todo li:last-child{{border-bottom:0}}
+ li.fail{{border-left:3px solid var(--fail)}} li.warn{{border-left:3px solid var(--warn)}}
+ .none{{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 10px;margin:0;color:var(--ok)}}
+ table.mx{{width:100%;border-collapse:collapse;background:#fff;font-size:13px}}
+ table.mx th,table.mx td{{border:1px solid var(--line);padding:4px 7px;text-align:left}}
+ table.mx th{{background:#eef1f4;font-weight:600;font-size:12.5px}}
+ td.v{{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}}
+ td.grp{{font-weight:700;background:#fafbfc}} td.nil{{text-align:center;color:#bbb}}
+ td.ok{{color:var(--ok)}} td.warn{{background:#fff8e6;color:var(--warn)}}
+ td.fail{{background:#fdecea;color:var(--fail);font-weight:700}}
+ td.v s{{color:#999;font-weight:400}}
+ details{{background:#fff;border:1px solid var(--line);border-radius:8px;margin:6px 0;padding:6px 10px}}
+ summary{{cursor:pointer;font-size:13px;color:#33414f}}
+ details ul{{margin:6px 0 2px;padding-left:18px;font-size:12.5px}}
+ small{{color:#667}}
+ .foot{{color:#889;font-size:11.5px;margin-top:14px}}
 </style></head><body><div class=wrap>
-<h1>📋 {REPORT_TITLE} <small>기준일 {g['date']}</small></h1>
-<div class=cards>
- <div class=card><h3>규정 현황</h3><div class=big>
-   <span class=ok>🟢 정상 {rc['ok']}</span><br>
-   <span class=warn>🟡 확인필요 {rc['warn']}</span><br>
-   <span class=fail>🔴 불일치 {rc['fail']}</span></div></div>
- <div class=card><h3>데이터 수집 상태</h3><div class=big>
-   <span class=ok>🟢 정상 {sc['ok']}</span><br>
-   <span class=warn>🟡 주의 {sc['warn']}</span><br>
-   <span class=fail>🔴 실패 {sc['fail']}</span></div></div>
+<h1>📋 {REPORT_TITLE} <small>{g['date']}</small></h1>
+<div class=strip>
+ <span class="count {'hit' if todo_n else ''}">조치 {todo_n}</span>
+ <span class=count>예고 {len(a['upcoming'])}</span>
+ {_chips_html(g['health'])}
 </div>
-<div class=note>⚠ 이 시스템은 "변경 없음"이 아니라 <b>"최신 정보를 정상 확인했고 그 결과 변경 없음"</b>을 보증합니다.
- 각 비교결과에는 Source 상태·최신성·마지막 정상수집일이 함께 표시됩니다. 최신성 미확인 항목은 "이상 없음"으로 간주하지 않습니다.</div>
 
-{_actions_html(g)}
+<h2>지금 조치할 것</h2>
+{_todo_html(g)}
 
-<h2>B. 시스템(데이터 수집) 현황</h2>
-<table><tr><th></th><th>Source</th><th>국가</th><th>상태</th><th>최신성</th><th>records</th>
- <th>마지막 정상수집</th><th>마지막 시도</th><th>메시지</th></tr>
-{_health_html(g['health'])}</table>
+<h2>기준 비교 <small>(mg/kg · <s>취소선</s>=지침 배포값, 옆이 현행 · 회색=지침 대상국 아님(참고) · ◦=최신성 미확인)</small></h2>
+{_matrix_html(g['comps'], g['live'])}
 
-<h2>A. 규정 비교 결과 (항목·심각도순)</h2>
-<p><small>GUIDELINE=지침 배포값 vs 현행 · REGISTRATION=등록/수출가부 · EXPORT_MARGIN=국내지침 여유(참고)</small></p>
-<table><tr><th></th><th>항목</th><th>Source</th><th>작물</th><th>농약</th><th>지침/국내</th><th>현행 해외</th>
- <th>상태</th><th>Severity</th><th>신뢰도<br>(상태/최신성)</th><th>근거</th></tr>
-{_rows_html(g['comps'])}</table>
-
-<h2>알림 (규정 + 시스템)</h2><ul>{alerts_html}</ul>
-<h2>WTO/SPS 변경예고 (Early warning)</h2><ul>{sps_html}</ul>
-<p><small>생성: {db.now_iso()} · PoC v0.1</small></p>
+{_fold('🕒 변경 예고 (WTO/SPS)', len(a['upcoming']), f'<ul>{upcoming}</ul>')}
+{_fold('🔔 알림', len(g['alerts']), f'<ul>{alerts_html}</ul>')}
+{_fold('📄 SPS 통보문', len(g['sps']), f'<ul>{sps_html}</ul>')}
+<p class=foot>"변경 없음"이 아니라 "최신 정보를 정상 확인했고 그 결과 변경 없음"을 뜻합니다.
+ 수집 실패 소스의 값은 조치목록에 '최신성 확인'으로 올라옵니다. · 생성 {db.now_iso()}</p>
 </div></body></html>"""
 
 

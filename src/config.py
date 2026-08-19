@@ -64,6 +64,7 @@ SMTP_TO = [x.strip() for x in os.getenv("SMTP_TO", "").split(",") if x.strip()]
 # 카카오 "나에게 보내기" — refresh token 있으면 활성화
 KAKAO_REST_KEY = os.getenv("KAKAO_REST_KEY", "")
 KAKAO_REFRESH_TOKEN = os.getenv("KAKAO_REFRESH_TOKEN", "")
+KAKAO_CLIENT_SECRET = os.getenv("KAKAO_CLIENT_SECRET", "")   # 앱에서 Client Secret 사용 시 필수
 
 
 def enabled_channels() -> list[str]:

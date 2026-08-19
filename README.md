@@ -19,7 +19,7 @@
 | EU DG SANTE Datalake | EU 현행 MRL·유효성분 | REST API (무키) | — | ✅ |
 | Codex (FAO/WHO) | 국제 참조 MRL | 내부 JSON 엔드포인트 | — | ✅ |
 | WTO ePing | SPS 변경예고(Early warning) | REST API | WTO_API_KEY | ✅ |
-| Japan (CAA/MHLW) | 일본 현행 MRL | 폼 크롤링 | — | ⚠️ 국내망 검증 필요(해외IP 403) |
+| Japan (FFCR) | 일본 현행 MRL(포지티브리스트) | 폼 세션 + HTML 표 | — | ✅ |
 
 자세한 근거: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/FIELD_MAPPING.md](docs/FIELD_MAPPING.md),
 [docs/MONITORING.md](docs/MONITORING.md), [docs/STEP4_VALIDATION.md](docs/STEP4_VALIDATION.md).
@@ -30,6 +30,7 @@
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env        # 키 채우기 (RDA_SERVICE_KEY, WTO_API_KEY, SMTP_*, KAKAO_*, OPS_PASS)
+python test_monitor.py      # 핵심 로직 자체점검 (네트워크 불필요)
 
 .venv/bin/python -m src.pipeline             # 수집→비교→보고서→알림
 .venv/bin/python -m src.pipeline --no-notify # 알림 없이
@@ -65,6 +66,7 @@ journalctl -u pesticide-monitor -n 100              # 실행 로그
 
 - **전체 실행** : 수집→비교→보고서 (알림 발송 여부 선택)
 - **소스별 점검** : RDA·EU·Codex·Japan·WTO 개별 수집 테스트 → 상태/최신성/records/응답시간 즉시 확인
+- **📨 테스트 발송** : 카톡/메일로 테스트 메시지 1건 발송 → 채널이 실제로 도착하는지 즉시 확인
 - 실행은 서브프로세스로 돌고 결과는 `collection_runs`·`source_health`에 그대로 기록된다(수동 실행도 감사 대상).
 
 **인증**: 전 경로 HTTP Basic (`.env`의 `OPS_USER`/`OPS_PASS`).
@@ -155,7 +157,10 @@ src/
 - `api.datalake.sante.service.ec.europa.eu` (EU)
 - `www.fao.org` (Codex)
 - `api.wto.org` (WTO ePing)
-- `jpn-pesticides-database.go.jp` (Japan)
+- `db.ffcr.or.jp` (Japan — 일본식품화학연구진흥재단 잔류농약기준 DB)
+  · 후생노동성 원문 DB `jpn-pesticides-database.go.jp` 는 해외 IP/봇을 403 차단해 자동 수집이 불가하다.
+  · FFCR 자료는 고시(告示 370호) 편집본이며 무단 전재를 금지하므로, 수집값은 내부 검토용으로만 쓰고
+    지침 개정 시에는 관보/후생노동성 고시 원문으로 재확인한다.
 
 ## 보안
 

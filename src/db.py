@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS foreign_mrls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source TEXT, pesticide_en TEXT, commodity_ko TEXT, commodity_src TEXT,
   mrl_kind TEXT, mrl_value REAL, mrl_display TEXT, is_default INTEGER,
-  effective_date TEXT, retrieved_at TEXT,
+  effective_date TEXT, note TEXT, retrieved_at TEXT,
   UNIQUE(source, pesticide_en, commodity_ko)
 );
 
@@ -131,6 +131,12 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for ddl in ("ALTER TABLE foreign_mrls ADD COLUMN note TEXT",
+                "ALTER TABLE comparison_results ADD COLUMN published_mrl TEXT"):
+        try:            # 기존 DB 마이그레이션 (컬럼이 이미 있으면 무시)
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass
     from .config import SOURCES
     for name, meta in SOURCES.items():
         conn.execute(
@@ -207,7 +213,7 @@ def add_alert(conn, *, category, severity, title, body, source=None) -> None:
 
 
 def record_foreign_mrl(conn, *, source, pesticide_en, commodity_ko, commodity_src,
-                       mrl, effective_date=None) -> None:
+                       mrl, effective_date=None, note=None) -> None:
     """foreign_mrls upsert + 값 변경 시 mrl_history/change_events 기록 (§13·§27)."""
     ts = now_iso()
     prev = conn.execute(
@@ -215,14 +221,14 @@ def record_foreign_mrl(conn, *, source, pesticide_en, commodity_ko, commodity_sr
         (source, pesticide_en, commodity_ko)).fetchone()
     conn.execute(
         "INSERT INTO foreign_mrls(source,pesticide_en,commodity_ko,commodity_src,mrl_kind,"
-        "mrl_value,mrl_display,is_default,effective_date,retrieved_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?)"
+        "mrl_value,mrl_display,is_default,effective_date,note,retrieved_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)"
         " ON CONFLICT(source,pesticide_en,commodity_ko) DO UPDATE SET "
         "commodity_src=excluded.commodity_src,mrl_kind=excluded.mrl_kind,mrl_value=excluded.mrl_value,"
         "mrl_display=excluded.mrl_display,is_default=excluded.is_default,"
-        "effective_date=excluded.effective_date,retrieved_at=excluded.retrieved_at",
+        "effective_date=excluded.effective_date,note=excluded.note,retrieved_at=excluded.retrieved_at",
         (source, pesticide_en, commodity_ko, commodity_src, mrl.kind.value,
-         mrl.value, mrl.display(), int(mrl.is_default), effective_date, ts),
+         mrl.value, mrl.display(), int(mrl.is_default), effective_date, note, ts),
     )
     if prev is None or (prev["mrl_display"] != mrl.display()):
         conn.execute(
