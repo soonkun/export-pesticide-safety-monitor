@@ -54,6 +54,10 @@ TAIWAN_MRL_URL = "https://data.fda.gov.tw/data/opendata/export/13/json"
 TAIWAN_CLASS_URL = "https://data.fda.gov.tw/data/opendata/export/16/json"   # 農作物類農產品之分類表
 TAIWAN_SOURCE_PAGE = "https://data.gov.tw/dataset/8944"
 
+# 캐나다 현행 MRL = Health Canada/PMRA 공개 추출 CSV(무키).
+CANADA_MRL_URL = "https://pest-control.canada.ca/pesticide-registry-api/api/extract/mrl"
+CANADA_SOURCE_PAGE = "https://pest-control.canada.ca/pesticide-registry/en/mrl-search.html"
+
 # 홍콩 현행 MRL = Pesticide Residues in Food Regulation (Cap. 132CM) Schedule 1.
 # bulk/API 없음 — CFS 조회 시스템의 폼 세션을 그대로 따른다.
 HK_BASE = "https://www.cfs.gov.hk/english/mrl/"
@@ -75,6 +79,7 @@ SOURCES = {
     # 보류: 표준 원문 사이트가 해외 접근을 차단해 수집 자체가 불가(2026-08-20 실측).
     # 담당 연구사에게 실제 참고 사이트를 확인한 뒤 재개한다. deferred 인 소스는 수집을 시도하지
     # 않으므로 매 실행마다 실패 알림을 만들지 않는다.
+    "Canada": {"country": "CA", "kind": "regulation", "interval_days": 14, "authoritative": True},
     "HongKong": {"country": "HK", "kind": "regulation", "interval_days": 30, "authoritative": True},
     "Indonesia": {"country": "ID", "kind": "regulation", "interval_days": 365, "authoritative": True,
                   "deferred": "표준 원문 사이트 해외 접근 차단 — 참고 사이트 확인 후 재개"},

@@ -1,5 +1,6 @@
 """핵심 로직 자체점검: python test_monitor.py  (프레임워크 없음, 네트워크 없음)"""
 from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
+from src.collectors.canada import effective_date, parse_csv
 from src.collectors.hongkong import parse_options, parse_report
 from src.collectors.taiwan import applies_to, build_classes
 from src.collectors.usa import build_group_index, parse_tolerances, resolve
@@ -208,6 +209,21 @@ def test_hongkong_parsers():
     rows = parse_report(HK_REPORT)
     assert rows == [("Pear", "0.02")]          # 머리글·안내문은 걸러진다
     assert parse_report("<table><tr><td>0 record was found.</td></tr></table>") == []
+
+
+CA_CSV = ('Chemical Common Name,Food Commodity,MRL Value (ppm),Comments,Established Via\n'
+          'Abamectin,Asian pears,0.02,,"MRL Database (26 April 2026) consulted via PMRL2026-02"\n'
+          'Abamectin,Pears,0.03,,Canada Gazette II Prior to 16 June 2008\n')
+
+
+def test_canada_csv():
+    rows = parse_csv(CA_CSV)
+    assert len(rows) == 2
+    # 아시아배와 일반 배는 값이 다르다 — 한국 배는 아시아배를 먼저 본다
+    assert rows[0]["Food Commodity"] == "Asian pears" and rows[0]["MRL Value (ppm)"] == "0.02"
+    assert effective_date(rows[0]["Established Via"]) == "26 April 2026"
+    assert effective_date(rows[1]["Established Via"]) == "16 June 2008"
+    assert effective_date("") is None
 
 
 def test_clip():
