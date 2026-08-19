@@ -277,6 +277,44 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 
 ---
 
+### 3.9 Canada · ✅ 구현·수집 중 (PMRA 공개 추출 CSV)
+
+| 항목 | 내용 |
+|---|---|
+| 규제기관 | Health Canada / 해충관리규제국(PMRA) |
+| 수집원 | `https://pest-control.canada.ca/pesticide-registry-api/api/extract/mrl` (무키) |
+| 형식 | CSV · **WINDOWS-1252** · 25,469행 |
+| 컬럼 | Chemical Common Name / Food Commodity / MRL Value (ppm) / Comments / **Established Via** |
+| 근거·시점 | `Established Via` 에 근거 문서와 날짜가 그대로 들어 있다 (예: `MRL Database (26 April 2026) consulted via PMRL2026-02`) |
+
+**주의점**
+- 캐나다도 미국식 작물그룹(`CROP GROUP 10`, `CROP SUBGROUP 13-07H`) 표기를 쓰지만
+  **그룹 구성 정의가 이 파일에 없다.** 근거 없이 펼치면 다른 작물의 기준을 붙이게 되므로
+  개별 품목 등재만 채택한다. 대상 작목 기준 12성분 중 10~11건이 개별 등재라 실익이 적다.
+- 한국 배는 아시아배 — `Asian pears` 와 `Pears` 가 따로 등재되고 값이 다르다.
+  `canada_name = ["Asian pears", "Pears"]` 순으로 조회한다.
+
+---
+
+### 3.10 미연결 국가 — 조사 기록 (2026-08-20)
+
+다음 라운드에서 같은 조사를 반복하지 않도록 실측 결과를 남긴다.
+
+| 국가 | 지침 행수 | 소스 | 상태 |
+|---|---|---|---|
+| 중국 | 1,303 | GB 2763 (CFSA) | `cfsa.net.cn` TLS 체인 오류, `sppt.cfsa.net.cn:8086/db` 응답 625B(JS). GB 표준은 유료 가능성 — 미해결 |
+| 호주 | 441 | FSANZ Schedule 20 (F2015L00468, 현행 컴필레이션 **F2026C00754**, 2026-07-16) | legislation.gov.au 는 **SPA** 라 `/latest/text`·`/Details/.../Download` 모두 63KB 셸만 반환. OData API(`api.prod.legislation.gov.au/v1`)로 Versions·Documents 메타(docx 713KB / pdf 1.5MB)는 조회되나 **파일 다운로드 URL 을 못 찾음** — 미해결 |
+| 태국 | 370 | ACFS | 사이트 접근 200. MRL 데이터셋 위치 미확인 |
+| 뉴질랜드 | 350 | MPI Food Notice (MRLs for Agricultural Compounds) | 접근 200. 호주 Schedule 20 과 **별개 기준**이다(상호인정은 되지만 기준 자체가 다름) |
+| 러시아 | 335 | EAEU / SanPiN | `eaeunion.org` 접근 200. 기준 문서 위치 미확인 |
+| 싱가폴 | 314 | SFA Food Regulations | `data.gov.sg` 접근 200. MRL 데이터셋 미확인 |
+
+**확인된 패턴**: 공개 API 가 있는 나라(미국 eCFR, 대만 TFDA, 캐나다 PMRA)는 하루면 붙고,
+표준이 유료이거나(인니 SNI, 중국 GB) 문서가 SPA 뒤에 있으면(호주) 막힌다.
+담당 연구사가 실제로 참고하는 사이트를 확인하면 크게 단축될 수 있다.
+
+---
+
 ### 3.4 Codex (FAO/WHO) · ✅ 검증됨 (구조 확인, bulk/API 미노출)
 
 | 항목 | 내용 |
