@@ -7,9 +7,11 @@ from .canada import CanadaCollector
 from .hongkong import HongKongCollector
 from .indonesia import IndonesiaCollector
 from .taiwan import TaiwanCollector
+from .watch import AustraliaWatchCollector, ChinaWatchCollector
 from .usa import UsaCollector
 from .wto_eping import WtoCollector
 
 ALL_COLLECTORS = [RdaCollector, EuCollector, CodexCollector, JapanCollector,
                   TaiwanCollector, UsaCollector, HongKongCollector, CanadaCollector,
-                  IndonesiaCollector, WtoCollector]
+                  IndonesiaCollector,
+                  ChinaWatchCollector, AustraliaWatchCollector, WtoCollector]

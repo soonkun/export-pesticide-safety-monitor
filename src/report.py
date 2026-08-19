@@ -52,6 +52,8 @@ def gather(conn) -> dict:
     sps = [dict(r) for r in conn.execute(
         "SELECT * FROM sps_notifications ORDER BY distribution_date DESC LIMIT 30").fetchall()]
     # 지침에 없는 (성분×작물×국가)도 현행 기준은 보여준다 — 비교표 빈칸 대신 회색 참고값
+    watched = [dict(r) for r in conn.execute(
+        "SELECT * FROM standard_watch ORDER BY source, effective_date DESC")]
     live = {(r["source"], r["pesticide_en"], r["commodity_ko"]): r["mrl_display"]
             for r in conn.execute("SELECT source,pesticide_en,commodity_ko,mrl_display FROM foreign_mrls")}
 
@@ -89,7 +91,7 @@ def gather(conn) -> dict:
         "date": date.today().isoformat(),
         "health": health, "comps": comps, "alerts": alerts,
         "changes": changes, "sps": sps,
-        "live": live, "eping": eping, "coverage": cov,
+        "live": live, "eping": eping, "coverage": cov, "watched": watched,
         "reg_counts": reg_counts, "sys_counts": sys_counts,
         "actions": actions,
         "reg_alerts": [a for a in alerts if a["category"] in ("REGULATION", "REGISTRATION")],
@@ -120,7 +122,9 @@ def render_text(g: dict) -> str:
     return "\n".join(lines)[:190]
 
 
-SOURCE_LABEL = {"EU": "EU", "Japan": "일본", "Codex": "Codex"}
+SOURCE_LABEL = {"EU": "EU", "Japan": "일본", "USA": "미국", "Taiwan": "대만",
+                "HongKong": "홍콩", "Canada": "캐나다", "China": "중국",
+                "Australia": "호주", "Indonesia": "인도네시아", "Codex": "Codex"}
 FFCR_GLOSSARY = ("http://www.ffcr.or.jp/en/zanryu/the-japanese-positive/"
                  "positive-list-system---glossary.html")
 
@@ -280,6 +284,13 @@ def _chips_html(health: list[dict]) -> str:
     seen = {h["source"]: h for h in health}
     out = []
     for name, meta in SOURCES.items():
+        if meta.get("watch"):        # 개정 감시 — 값은 못 읽지만 살아 있는 소스다
+            h = seen.get(name)
+            st = (h["status"] if h else "UNKNOWN") or "UNKNOWN"
+            b = _sys_bucket(st)
+            out.append(f'<span class="chip {b}" title="개정 감시: {_esc(meta["watch"])}">'
+                       f'👁 {name}</span>')
+            continue
         if meta.get("deferred"):     # 보류 — 실패가 아니므로 빨간 점으로 세지 않는다
             out.append(f'<span class="chip" title="보류: {_esc(meta["deferred"])}">⏸ {name}</span>')
             continue
@@ -302,6 +313,28 @@ def _margin_html(comps: list[dict]) -> str:
         for c in rows) + "</ul>"
 
 
+def _watched_html(rows: list[dict]) -> str:
+    """개정 감시 — 값 대조는 못 해도 현행판이 무엇이고 언제 바뀌었는지는 매일 확인한다."""
+    if not rows:
+        return "<p class=dim>감시 중인 기준 없음</p>"
+    latest: dict[str, dict] = {}
+    for r in rows:                       # 소스별 최신 시행일 1건만 보여준다
+        cur = latest.get(r["source"])
+        if cur is None or (r["effective_date"] or "") > (cur["effective_date"] or ""):
+            latest[r["source"]] = r
+    out = []
+    for src, r in sorted(latest.items()):
+        out.append(f"""<div class="row ok">
+ <div class=who><b>{_esc(SOURCE_LABEL.get(src, src))}</b> · {_esc(r['standard_code'])}</div>
+ <div class=cty>시행 {_esc(r['effective_date'])}</div>
+ <div class=val>{_esc(r['revision'] or '')}</div>
+ <div class=vd><b>👁 감시 중</b><br><small>값 대조 불가</small></div>
+ <div class=why>확인 {_esc((r['checked_at'] or '')[:16])} · 최초 확인 {_esc((r['first_seen'] or '')[:10])}
+   {_titled('원문 보기', r['url'], 20)} — 개정되면 알림이 뜹니다. 값은 원문에서 직접 대조해야 합니다.
+   </div></div>""")
+    return "".join(out)
+
+
 def _coverage_html(cov: dict) -> str:
     """지침이 배포 중인 조합 중 실제로 대조한 비율. 못 한 것을 숨기지 않는다."""
     def _tbl(items, extra=lambda x: ""):
@@ -322,6 +355,10 @@ def _coverage_html(cov: dict) -> str:
 <h4>⛔ 현행 기준 소스 미연결 ({len(cov['no_source'])})</h4>
 <p class=hint>해당 국가의 현행 MRL을 자동 수집할 소스가 아직 없습니다 — 수집기 추가가 필요합니다.</p>
 <ul>{_tbl(cov['no_source'])}</ul>
+<h4>👁 개정 감시 ({len(cov['watched'])})</h4>
+<p class=hint>값을 기계 판독할 수 없어 자동 대조는 못 하지만, <b>현행판이 바뀌면 알림이 뜹니다</b>
+ — {_esc(' · '.join(sorted({x['reason'] for x in cov['watched']})) or '')}.</p>
+<ul>{_tbl(cov['watched'])}</ul>
 <h4>⏸ 보류 ({len(cov['deferred'])})</h4>
 <p class=hint>수집 자체가 불가능해 잠시 멈춰 둔 국가입니다
  — {_esc(' · '.join(sorted({x['reason'] for x in cov['deferred']})) or '사유 미기재')}.
@@ -434,6 +471,9 @@ def render_html(g: dict) -> str:
 <p class=hint>숨김 {sum(hid.values())}건 — 반영 확인 {hid['reflected']} ·
  지침 대상국 아님 {hid['out_of_scope']} · 시행일 미정 {hid['undated']}.
  이미 시행됐고 현행 수집에 반영된 통보문은 조치할 것이 없어 표시하지 않습니다.</p>
+
+<h2>개정 감시 <small>(값 대조 불가 · 판 변경만 추적)</small></h2>
+<div class=list>{_watched_html(g['watched'])}</div>
 
 {_fold('📐 대조 범위 — 지침 ' + str(g['coverage']['total']) + '개 조합 중 ' + str(len(g['coverage']['covered'])) + '개 대조', g['coverage']['total'], _coverage_html(g['coverage']))}
 {_fold('📌 참고 · 국내 MRL이 현행 해외기준보다 높은 건', len([c for c in g['comps'] if c['item'] == 'EXPORT_MARGIN']), _margin_html(g['comps']))}

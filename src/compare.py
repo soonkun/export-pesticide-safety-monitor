@@ -15,6 +15,7 @@ import math
 from datetime import date, datetime
 
 from . import db
+from .config import SOURCES
 from .masters import COMMODITIES, PESTICIDES, member_label
 from .models import Confidence, Freshness, Health, Mrl, MrlKind, RegStatus, Severity
 from .normalize import align_pipe, split_rda_product
@@ -23,12 +24,17 @@ from .normalize import align_pipe, split_rda_product
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
 COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan",
                   "인도네시아": "Indonesia", "홍콩": "HongKong", "캐나다": "Canada",
-                  "중국": "China"}
-IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
+                  "중국": "China", "호주": "Australia"}
+# 개정 감시 전용 소스(watch)는 MRL 값을 만들지 않으므로 값 대조 대상이 아니다.
+# 넣어두면 "현행에서 확인 안 됨 → 삭제/등록취소 확인 필요"라는 가짜 경고가 쏟아진다.
+IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()
+                  if not SOURCES.get(src, {}).get("watch")]
 
 
 def commodity_mapped(source: str, commodity_ko: str) -> bool:
     """그 소스에서 이 작목을 조회할 식별자가 마스터에 있는가."""
+    if SOURCES.get(source, {}).get("watch"):
+        return False                     # 감시 전용 소스는 값 대조 자체를 하지 않는다
     cm = COMMODITIES.get(commodity_ko)
     if not cm:
         return False
@@ -52,13 +58,15 @@ def coverage(conn) -> dict:
     # 수집기는 붙어 있으나 아직 값을 하나도 못 받은 소스 (예: 수동 입력 파일 대기)
     has_data = {r["source"] for r in conn.execute(
         "SELECT DISTINCT source FROM foreign_mrls")}
-    from .config import SOURCES
-    covered, no_source, deferred, no_mapping = [], [], [], []
+    covered, no_source, deferred, watched, no_mapping = [], [], [], [], []
     for r in rows:
         item = {"country": r["target_country"], "commodity": r["commodity_ko"], "rows": r["n"]}
         src = COUNTRY_SOURCE.get(r["target_country"])
-        why = SOURCES.get(src, {}).get("deferred") if src else None
-        if why:
+        meta = SOURCES.get(src, {}) if src else {}
+        why, watch = meta.get("deferred"), meta.get("watch")
+        if watch:
+            watched.append({**item, "source": src, "reason": watch})
+        elif why:
             deferred.append({**item, "source": src, "reason": why})
         elif not src:
             no_source.append(item)
@@ -69,7 +77,7 @@ def coverage(conn) -> dict:
         else:
             covered.append(item)
     return {"covered": covered, "no_source": no_source, "deferred": deferred,
-            "no_mapping": no_mapping, "total": len(rows)}
+            "watched": watched, "no_mapping": no_mapping, "total": len(rows)}
 
 
 def _eq(a: float, b: float) -> bool:

@@ -54,6 +54,12 @@ TAIWAN_MRL_URL = "https://data.fda.gov.tw/data/opendata/export/13/json"
 TAIWAN_CLASS_URL = "https://data.fda.gov.tw/data/opendata/export/16/json"   # 農作物類農產品之分類表
 TAIWAN_SOURCE_PAGE = "https://data.gov.tw/dataset/8944"
 
+# 개정 감시 전용 소스 — 값은 기계 판독 불가, '현행판이 언제 바뀌었는지'만 추적한다.
+CN_SEARCH_URL = "https://sppt.cfsa.net.cn:8086/db?task=indexSearch"
+CN_SOURCE_PAGE = "https://sppt.cfsa.net.cn:8086/db"
+AU_VERSIONS_URL = "https://api.prod.legislation.gov.au/v1/Versions"
+AU_SCHEDULE20_TITLE = "F2015L00468"      # ANZ Food Standards Code – Schedule 20 – MRLs
+
 # 캐나다 현행 MRL = Health Canada/PMRA 공개 추출 CSV(무키).
 CANADA_MRL_URL = "https://pest-control.canada.ca/pesticide-registry-api/api/extract/mrl"
 CANADA_SOURCE_PAGE = "https://pest-control.canada.ca/pesticide-registry/en/mrl-search.html"
@@ -76,11 +82,12 @@ SOURCES = {
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
     "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
     "Taiwan": {"country": "TW", "kind": "regulation", "interval_days": 30,  "authoritative": True},
-    # 보류: 표준 원문(GB 2763-2021)이 **스캔 이미지 PDF** 로만 공개된다(2026-08-20 실측).
-    # 다운로드는 되지만 420쪽 전부 JPEG 이고 텍스트 레이어가 없어 기계 판독이 불가.
-    # OCR 로 MRL 숫자를 뽑는 것은 오독 시 수출 판정을 틀리게 하므로 하지 않는다(§5·§30).
-    "China": {"country": "CN", "kind": "regulation", "interval_days": 180, "authoritative": True,
-              "deferred": "GB 2763-2021 이 스캔 PDF 로만 공개 — 기계 판독 불가"},
+    # 값 대조는 불가(GB 2763 이 스캔 PDF, 호주는 문서 다운로드 경로 미확인)하지만
+    # 현행판이 바뀌었는지는 매일 확인한다 — watch=True 인 소스는 MRL 값을 만들지 않는다.
+    "China": {"country": "CN", "kind": "regulation", "interval_days": 180,
+              "authoritative": True, "watch": "GB 2763 이 스캔 PDF — 값 대조 불가, 개정만 감시"},
+    "Australia": {"country": "AU", "kind": "regulation", "interval_days": 30,
+                  "authoritative": True, "watch": "Schedule 20 문서 다운로드 경로 미확인 — 개정만 감시"},
     # 보류: 표준 원문 사이트가 해외 접근을 차단해 수집 자체가 불가(2026-08-20 실측).
     # 담당 연구사에게 실제 참고 사이트를 확인한 뒤 재개한다. deferred 인 소스는 수집을 시도하지
     # 않으므로 매 실행마다 실패 알림을 만들지 않는다.

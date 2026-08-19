@@ -226,6 +226,29 @@ def test_canada_csv():
     assert effective_date("") is None
 
 
+def test_standard_watch():
+    """값을 못 읽는 기준이라도 판이 바뀌면 잡아내야 한다 — 그게 감시의 전부다."""
+    import sqlite3
+    from src import db
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    db.init_db(conn)
+
+    kw = dict(source="China", code="GB 2763-2021", published="2021-03-03",
+              effective="2021-09-03", revision=None)
+    assert db.record_standard(conn, **kw) is None      # 최초 등록은 개정이 아니다
+    assert db.record_standard(conn, **kw) is None      # 그대로면 조용하다
+
+    changed = db.record_standard(conn, **{**kw, "effective": "2027-01-01"})
+    assert changed and "2021-09-03" in changed and "2027-01-01" in changed
+
+    # 판 문자열만 바뀌어도(호주 컴필레이션 번호) 개정으로 잡는다
+    au = dict(source="Australia", code="Schedule 20", published="2026-08-04",
+              effective="2026-07-16", revision="compilation 91")
+    db.record_standard(conn, **au)
+    assert db.record_standard(conn, **{**au, "revision": "compilation 92"})
+
+
 def test_clip():
     long = "Maximum levels of 3-monochloropropanediol (3-MCPD), 3-MCPD fatty acid esters and glycidyl"
     s = _clip(long, 56)

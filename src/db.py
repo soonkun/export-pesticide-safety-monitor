@@ -76,6 +76,14 @@ CREATE TABLE IF NOT EXISTS foreign_mrls (
   UNIQUE(source, pesticide_en, commodity_ko)
 );
 
+-- 개정 감시 (§21) : 값을 못 읽는 소스라도 "현행판이 무엇이고 언제 바뀌었는지"는 추적한다.
+-- 문서를 한 번 받아두는 것은 스냅샷일 뿐 모니터링이 아니다. 판 번호·시행일을 매일 확인한다.
+CREATE TABLE IF NOT EXISTS standard_watch (
+  source TEXT, standard_code TEXT, published_date TEXT, effective_date TEXT,
+  revision TEXT, url TEXT, first_seen TEXT, checked_at TEXT,
+  PRIMARY KEY(source, standard_code)
+);
+
 -- MRL 이력 (§13) : 값이 바뀔 때마다 append
 CREATE TABLE IF NOT EXISTS mrl_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -228,6 +236,34 @@ def add_alert(conn, *, category, severity, title, body, source=None) -> None:
         "INSERT INTO alerts(created_at,category,severity,title,body,source) VALUES(?,?,?,?,?,?)",
         (now_iso(), category, severity, title, body, source),
     )
+
+
+def record_standard(conn, *, source, code, published=None, effective=None,
+                    revision=None, url=None) -> str | None:
+    """현행 기준 문서의 판 정보를 기록. 바뀌었으면 변경 요약 문자열을 돌려준다.
+
+    값(MRL)을 기계 판독할 수 없는 소스도 '개정되었는가'는 확인할 수 있다.
+    담당자에게 필요한 것은 10,092개 숫자가 아니라 **언제 들여다봐야 하는가** 이다.
+    """
+    ts = now_iso()
+    prev = conn.execute(
+        "SELECT published_date,effective_date,revision FROM standard_watch "
+        "WHERE source=? AND standard_code=?", (source, code)).fetchone()
+    conn.execute(
+        "INSERT INTO standard_watch(source,standard_code,published_date,effective_date,"
+        "revision,url,first_seen,checked_at) VALUES(?,?,?,?,?,?,?,?)"
+        " ON CONFLICT(source,standard_code) DO UPDATE SET "
+        "published_date=excluded.published_date,effective_date=excluded.effective_date,"
+        "revision=excluded.revision,url=excluded.url,checked_at=excluded.checked_at",
+        (source, code, published, effective, revision, url, ts, ts))
+    if prev is None:
+        return None                      # 처음 본 판 — 개정이 아니라 최초 등록
+    before = (prev["published_date"], prev["effective_date"], prev["revision"])
+    after = (published, effective, revision)
+    if before == after:
+        return None
+    return (f"{code}: 발표 {prev['published_date']}→{published} · "
+            f"시행 {prev['effective_date']}→{effective} · 판 {prev['revision']}→{revision}")
 
 
 def record_foreign_mrl(conn, *, source, pesticide_en, commodity_ko, commodity_src,
