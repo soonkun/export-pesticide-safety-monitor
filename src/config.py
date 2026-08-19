@@ -76,6 +76,11 @@ SOURCES = {
     "Codex": {"country": "INT", "kind": "reference",  "interval_days": 400, "authoritative": False},
     "USA":   {"country": "US",  "kind": "regulation", "interval_days": 7,   "authoritative": True},
     "Taiwan": {"country": "TW", "kind": "regulation", "interval_days": 30,  "authoritative": True},
+    # 보류: 표준 원문(GB 2763-2021)이 **스캔 이미지 PDF** 로만 공개된다(2026-08-20 실측).
+    # 다운로드는 되지만 420쪽 전부 JPEG 이고 텍스트 레이어가 없어 기계 판독이 불가.
+    # OCR 로 MRL 숫자를 뽑는 것은 오독 시 수출 판정을 틀리게 하므로 하지 않는다(§5·§30).
+    "China": {"country": "CN", "kind": "regulation", "interval_days": 180, "authoritative": True,
+              "deferred": "GB 2763-2021 이 스캔 PDF 로만 공개 — 기계 판독 불가"},
     # 보류: 표준 원문 사이트가 해외 접근을 차단해 수집 자체가 불가(2026-08-20 실측).
     # 담당 연구사에게 실제 참고 사이트를 확인한 뒤 재개한다. deferred 인 소스는 수집을 시도하지
     # 않으므로 매 실행마다 실패 알림을 만들지 않는다.

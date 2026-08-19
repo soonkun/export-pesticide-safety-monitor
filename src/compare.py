@@ -22,7 +22,8 @@ from .normalize import align_pipe, split_rda_product
 # 지침 원문의 국가명 → 우리가 현행 기준을 수집하는 소스.
 # 지침은 13개국을 배포하지만 현행 기준을 자동 수집할 수 있는 곳은 아직 이 둘뿐이다.
 COUNTRY_SOURCE = {"EU": "EU", "일본": "Japan", "미국": "USA", "대만": "Taiwan",
-                  "인도네시아": "Indonesia", "홍콩": "HongKong", "캐나다": "Canada"}
+                  "인도네시아": "Indonesia", "홍콩": "HongKong", "캐나다": "Canada",
+                  "중국": "China"}
 IMPORT_SOURCES = [(src, country) for country, src in COUNTRY_SOURCE.items()]
 
 

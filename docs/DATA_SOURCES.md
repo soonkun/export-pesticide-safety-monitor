@@ -302,12 +302,52 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 
 | 국가 | 지침 행수 | 소스 | 상태 |
 |---|---|---|---|
-| 중국 | 1,303 | GB 2763 (CFSA) | `cfsa.net.cn` TLS 체인 오류, `sppt.cfsa.net.cn:8086/db` 응답 625B(JS). GB 표준은 유료 가능성 — 미해결 |
+| 중국 | 1,303 | GB 2763 (CFSA) | **⏸ 보류** — 원문 확보는 성공했으나 스캔 PDF. §3.11 참조 |
 | 호주 | 441 | FSANZ Schedule 20 (F2015L00468, 현행 컴필레이션 **F2026C00754**, 2026-07-16) | legislation.gov.au 는 **SPA** 라 `/latest/text`·`/Details/.../Download` 모두 63KB 셸만 반환. OData API(`api.prod.legislation.gov.au/v1`)로 Versions·Documents 메타(docx 713KB / pdf 1.5MB)는 조회되나 **파일 다운로드 URL 을 못 찾음** — 미해결 |
 | 태국 | 370 | ACFS | 사이트 접근 200. MRL 데이터셋 위치 미확인 |
 | 뉴질랜드 | 350 | MPI Food Notice (MRLs for Agricultural Compounds) | 접근 200. 호주 Schedule 20 과 **별개 기준**이다(상호인정은 되지만 기준 자체가 다름) |
 | 러시아 | 335 | EAEU / SanPiN | `eaeunion.org` 접근 200. 기준 문서 위치 미확인 |
 | 싱가폴 | 314 | SFA Food Regulations | `data.gov.sg` 접근 200. MRL 데이터셋 미확인 |
+
+### 3.11 China · ⏸ 보류 (원문은 받았으나 기계 판독 불가)
+
+| 항목 | 내용 |
+|---|---|
+| 기준 | **GB 2763-2021** 식품안전국가표준 식품중 농약최대잔류한량 (564 성분 · 10,092 항목) + **GB 2763.1-2022**(112 성분 추가) |
+| 수집원 | 국가식품안전위험평가센터(CFSA) 식품안전국가표준 데이터검색플랫폼 |
+| 접근 | ✅ **가능** (아래 절차로 실제 다운로드 성공) |
+| 판독 | ❌ **불가** — 스캔 이미지 PDF |
+
+**접근 절차 (실측 성공, 2026-08-20)**
+```
+POST https://sppt.cfsa.net.cn:8086/db?task=indexSearch
+     isLength=9999&num_tn=99&standard_type=&keyword=농약최대잔류한량
+  → [{"CODE":"GB 2763-2021","FJ":[{"ID_F":"42C476C9-...","FACT_NAME":"...pdf"}],"PDATE":"2021-03-03",...}]
+POST https://sppt.cfsa.net.cn:8086/cfsa_aiguo
+     task=d_p&file_guid=42C476C9-DFA8-4470-95D0-05C2032D0CB4&accessData=gj
+  → 66,781,578 bytes PDF (Referer 헤더 필요, TLS 체인 문제로 -k 필요)
+```
+※ 사이트에 "系统维护中" 안내가 떠 있으나 위 경로는 정상 동작했다.
+※ 플랫폼이 제시하는 현행판은 **GB 2763-2021** 이다. 일부 3자 사이트가 언급하는
+   "GB 2763-2026" 은 CFSA 공식 목록에 없어 근거로 삼지 않는다.
+
+**막힌 지점**
+```
+pdfinfo  : 420 pages
+pdffonts : (없음)
+pdfimages: 페이지마다 1240x1753 jpeg 150dpi
+pdftotext: 1~3 / 10~12 / 200~202 / 400~402 쪽 모두 추출 문자 0
+```
+중국농약정보망(ICAMA)의 다른 사본(`chinapesticide.org.cn`, 67MB / 422쪽)도 동일하게 스캔본이다.
+
+**OCR 을 하지 않는 이유**: 420쪽 중국어 표를 OCR 해 10,092개 MRL 숫자를 뽑는 것은
+한 자리만 틀려도 수출 가부 판정을 뒤집는다. 본 시스템은 규정값을 추정으로 만들지 않는다(§5·§30).
+대상 성분(12종)만 골라 부분 OCR 하는 방법도 있으나, 색인 자체가 스캔이라 쪽 특정부터 추정이 된다.
+
+**재개 방법**: 담당 연구사가 실제로 참고하는 경로(유료 DB·기관 내부 정리본·수출협회 자료 등)를
+확인하는 것이 가장 빠르다. 확보되면 인도네시아와 같은 수동 입력 경로로 즉시 받을 수 있다.
+
+---
 
 **확인된 패턴**: 공개 API 가 있는 나라(미국 eCFR, 대만 TFDA, 캐나다 PMRA)는 하루면 붙고,
 표준이 유료이거나(인니 SNI, 중국 GB) 문서가 SPA 뒤에 있으면(호주) 막힌다.
