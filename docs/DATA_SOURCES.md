@@ -336,6 +336,41 @@ EPA는 개별 작물이 아니라 **작물그룹** 단위로 허용량을 정하
 
 ---
 
+### 3.13 WTO ePing 첨부문서 스캔 — 성분명이 API 에 없는 문제
+
+**문제**: ePing API 의 `title`/`products` 에는 성분명이 없는 나라가 많다.
+
+```
+G/SPS/N/JPN/1417
+  title    : Revision of the Specifications and Standards for Foods, Food Additives, Etc.
+  products : Meat and edible meat offal (HS codes: 02.01, 02.02, ...)
+  keywords : Food safety, Human health, Maximum residue limits (MRLs)
+```
+성분명은 첨부 .docx 본문에만 있다:
+`6. Description of content: Proposal of maximum residue limits (MRLs) for the following
+agricultural chemical: Pesticide: Mepronil.`
+
+**실측 규모**: `keywords` 에 MRL 이 달린 통보문 **202건** 중 성분명이 구조화 필드에 드러난 것은
+**5건**. 나머지 197건은 성분 단위로 잡을 방법이 없었다.
+
+**해결**: 첨부는 스캔본이 아니라 진짜 Office 문서(PK zip)다. `zipfile` + `word/document.xml`
+로 본문을 뽑아 대상 성분명을 찾는다(외부 의존성 없음). 결과는 `sps_attachments` 에 캐시해
+매일 다시 받지 않는다. 1회 실행당 `SCAN_LIMIT=120` 건까지만 새로 받아 증분 처리한다.
+
+**결과**: 202건 스캔(성공 201 / 실패 1) → 대상 성분 언급 **16건**.
+성분 단위 예고가 1건 → 4건으로 늘었고, 그중에는 값 대조가 불가능한 나라의 건이 포함된다.
+
+| 통보문 | 회원국 | 성분 | 의미 |
+|---|---|---|---|
+| G/SPS/N/AUS/637 | 호주 | Fludioxonil | 값 대조 불가 국가 — **이 경로 말고는 알 방법이 없다** |
+| G/SPS/N/JPN/1397 | 일본 | Chlorantraniliprole | 제목이 포괄적이라 기존에는 안 잡혔다 |
+| G/SPS/N/AUS/631 | 호주 | Azoxystrobin, Cyprodinil | 〃 |
+
+**한계**: 첨부가 .docx 가 아닌 형식이거나 본문 표기가 다르면 놓친다(실패 1건). 통보는 초안이므로
+채택·시행 여부와 최종 수치는 별도 확인이 필요하다.
+
+---
+
 ### 3.4 Codex (FAO/WHO) · ✅ 검증됨 (구조 확인, bulk/API 미노출)
 
 | 항목 | 내용 |

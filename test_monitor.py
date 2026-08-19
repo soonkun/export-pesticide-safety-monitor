@@ -3,6 +3,7 @@ from src.collectors.japan import UNIFORM_LIMIT, _match_id, parse_detail
 from src.collectors.canada import effective_date, parse_csv
 from src.collectors.hongkong import parse_options, parse_report
 from src.collectors.taiwan import applies_to, build_classes
+from src.collectors.wto_eping import _docx_text
 from src.collectors.usa import build_group_index, parse_tolerances, resolve
 from src.compare import commodity_mapped, guideline_verdict
 from src.models import MrlKind, RegStatus, Severity
@@ -234,6 +235,21 @@ def test_eping_member_country_map():
         assert country in EPING_MEMBER_COUNTRY, country
     assert EPING_MEMBER_COUNTRY["중국"] == "China"
     assert EPING_MEMBER_COUNTRY["대만"] == "Chinese Taipei"   # ePing 은 'Taiwan' 을 쓰지 않는다
+
+
+def test_docx_text_extraction():
+    """ePing 첨부에서 성분명을 뽑는 경로 — 여기서 못 뽑으면 예고가 통째로 안 보인다."""
+    import io, zipfile
+    body = ('<w:document><w:body><w:p><w:r><w:t>6. Description of content:</w:t></w:r>'
+            '<w:r><w:t>Proposal of maximum residue limits (MRLs) for the following '
+            'agricultural chemical: Pesticide: Spinetoram.</w:t></w:r></w:p></w:body></w:document>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("word/document.xml", body)
+    text = _docx_text(buf.getvalue()).lower()
+    assert "spinetoram" in text                   # 태그 사이로 쪼개진 문장도 이어붙는다
+    assert "maximum residue limits" in text
+    assert "<w:t>" not in text
 
 
 def test_standard_watch():

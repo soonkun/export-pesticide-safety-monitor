@@ -273,6 +273,13 @@ def classify_eping(conn) -> dict:
                for r in conn.execute("SELECT source,last_success_at FROM source_health")}
     ens = {pm["english"].lower(): ko for ko, pm in PESTICIDES.items()}
 
+    # 첨부 .docx 스캔에서 확인된 성분 (title/products 에 이름이 없는 통보문 보완)
+    from_attachment: dict[str, list[str]] = {}
+    for a in conn.execute("SELECT document_symbol,pesticides FROM sps_attachments "
+                          "WHERE pesticides IS NOT NULL AND pesticides <> ''"):
+        from_attachment[a["document_symbol"]] = [p.strip().lower()
+                                                 for p in a["pesticides"].split(",") if p.strip()]
+
     urgent, prepare = [], []
     hidden = {"reflected": 0, "out_of_scope": 0, "undated": 0}
     rows = conn.execute(
@@ -281,6 +288,10 @@ def classify_eping(conn) -> dict:
     for r in rows:
         text = f"{r['title'] or ''} {r['products'] or ''}".lower()
         hit_en = next((en for en in ens if en in text), None)
+        if not hit_en:
+            # 구조화 필드에 없으면 첨부문서 스캔 결과를 본다
+            hit_en = next((en for en in from_attachment.get(r["document_symbol"], [])
+                           if en in ens), None)
         if not hit_en:
             continue
         ko = ens[hit_en]

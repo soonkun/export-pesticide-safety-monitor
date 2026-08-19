@@ -84,6 +84,14 @@ CREATE TABLE IF NOT EXISTS standard_watch (
   PRIMARY KEY(source, standard_code)
 );
 
+-- SPS 통보문 첨부문서 스캔 결과 (§16)
+-- ePing API 의 title/products 에는 성분명이 없고 첨부 .docx 본문에만 있는 경우가 많다.
+-- 첨부는 한 번만 받아 결과를 캐시한다(매일 202건을 다시 받지 않기 위함).
+CREATE TABLE IF NOT EXISTS sps_attachments (
+  document_symbol TEXT PRIMARY KEY,
+  link TEXT, fetched_at TEXT, status TEXT, pesticides TEXT
+);
+
 -- MRL 이력 (§13) : 값이 바뀔 때마다 append
 CREATE TABLE IF NOT EXISTS mrl_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
