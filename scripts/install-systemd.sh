@@ -12,6 +12,11 @@ touch "$ENV_FILE"
 chown "$USER_NAME" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
+# 서비스는 $USER_NAME 으로 돌면서 DB·원본스냅샷·보고서를 쓴다.
+# 저장소를 다른 계정(root 등)이 체크아웃했으면 쓰기 권한이 없어 파이프라인이 실패한다.
+mkdir -p "$APP/data/raw" "$APP/out"
+chown -R "$USER_NAME" "$APP/data" "$APP/out"
+
 # OPS_PASS 없으면 생성 (관제 페이지 Basic 인증). 비밀번호 없이는 API가 뜨지 않는다.
 if ! grep -q '^OPS_PASS=.\+' "$ENV_FILE" 2>/dev/null; then
   PASS="$(head -c 18 /dev/urandom | base64 | tr -d '/+=')"
